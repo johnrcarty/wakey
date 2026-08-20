@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+### Added
+
+- **Resume previous playback** (opt-in, per alarm). If the speaker was already
+  playing a Music Assistant queue — ambient noise, a sleep playlist — the alarm
+  now inserts itself into that queue rather than replacing it, and dismissing or
+  snoozing puts the original track back at its previous position and volume.
+  Off by default; Music Assistant sources only. Anything that cannot be resumed
+  from falls back to the previous replace-and-pause behaviour.
+
 ## 0.3.0
 
 Clearing a ringing alarm no longer requires opening the panel.

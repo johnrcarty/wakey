@@ -46,6 +46,20 @@ _LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
+class ResumeState:
+    """What the target player was playing before the alarm interrupted it.
+
+    Only ever populated for Music Assistant queues: `get_queue` is the one
+    source that reports both the playing item's URI and its elapsed position,
+    and a plain media_player exposes no queue to restore into.
+    """
+
+    uri: str
+    elapsed: int
+    volume: float | None
+
+
+@dataclass
 class RingState:
     """Runtime state for an alarm that is currently ringing or snoozed."""
 
@@ -53,6 +67,14 @@ class RingState:
     snoozed: bool = False
     attempts: int = 0
     unsubs: list[CALLBACK_TYPE] = field(default_factory=list)
+    # What to put back when this ring ends. None means "nothing to restore" —
+    # either the alarm has resume_previous off, or nothing was playing.
+    resume: ResumeState | None = None
+    # Set once the capture has been attempted, successful or not. The retry in
+    # _async_verify re-enters _async_start_playback, and by then the alarm
+    # itself is what is playing — capturing again would remember the alarm as
+    # the thing to restore.
+    resume_checked: bool = False
     # Identifies this specific ring, so a tap on a notification from a prior
     # ring of the same alarm (e.g. before a snooze re-fires it) can't act on
     # the current one. Full-length because it doubles as the authorization on
@@ -196,6 +218,9 @@ class WakeyPlayer:
         if current.state == STATE_UNAVAILABLE:
             _LOGGER.warning("%s is unavailable — trying anyway", player)
 
+        if not state.resume_checked:
+            await self._async_capture_resume(alarm, state)
+
         if current.state in (STATE_OFF, STATE_UNKNOWN):
             await self._call("media_player", "turn_on", {ATTR_ENTITY_ID: player})
 
@@ -216,7 +241,10 @@ class WakeyPlayer:
                 {
                     ATTR_ENTITY_ID: player,
                     "media_id": alarm.source_uri,
-                    "enqueue": "replace",
+                    # "replace" wipes the queue; "play" inserts at the current
+                    # position and leaves the rest of it intact underneath, so
+                    # there is something left to resume into.
+                    "enqueue": "play" if state.resume is not None else "replace",
                 },
             )
         else:
@@ -232,6 +260,88 @@ class WakeyPlayer:
 
         if alarm.fade_seconds > 0:
             self._start_fade(alarm, state, start_volume)
+
+    # --- resume ------------------------------------------------------------
+
+    async def _async_capture_resume(self, alarm: AlarmEntry, state: RingState) -> None:
+        """Remember what is playing, so dismissing the alarm can put it back.
+
+        Every branch that cannot restore leaves `state.resume` as None, which
+        keeps the alarm on the original "replace" path — an alarm that cannot
+        be resumed from must still be an alarm that reliably plays.
+        """
+        state.resume_checked = True
+        if not alarm.resume_previous or alarm.source_kind != SOURCE_MUSIC_ASSISTANT:
+            return
+
+        current = self.hass.states.get(alarm.media_player)
+        if current is None or current.state != STATE_PLAYING:
+            return
+        # A queue owned by some other integration cannot be inserted into and
+        # resumed the way a Music Assistant one can.
+        if current.attributes.get("app_id") != "music_assistant":
+            return
+
+        response = await self._call_with_response(
+            "music_assistant", "get_queue", {ATTR_ENTITY_ID: alarm.media_player}
+        )
+        queue = (response or {}).get(alarm.media_player)
+        if not queue:
+            return
+        media_item = (queue.get("current_item") or {}).get("media_item") or {}
+        if not (uri := media_item.get("uri")):
+            return
+
+        state.resume = ResumeState(
+            uri=uri,
+            elapsed=int(queue.get("elapsed_time") or 0),
+            volume=current.attributes.get("volume_level"),
+        )
+        _LOGGER.debug(
+            "%s will resume %s at %ss after %s", alarm.media_player, uri, state.resume.elapsed, alarm.name
+        )
+
+    async def _async_restore_previous(self, alarm: AlarmEntry, state: RingState) -> None:
+        """Put back what the alarm interrupted.
+
+        Re-inserting the captured URI is deliberate. The interrupted item is
+        still in the queue, but it sits *behind* the inserted alarm, and
+        neither media_next_track (which skips past it to the following item)
+        nor media_previous_track (which only restarts the current one) can get
+        back to it. Inserting a fresh copy and seeking is the one sequence
+        that works through the public services.
+        """
+        resume = state.resume
+        if resume is None:
+            return
+        # Cleared first: a restore must never run twice for one ring, however
+        # dismiss and snooze happen to interleave.
+        state.resume = None
+
+        # Volume goes back before the audio does, so the resumed track cannot
+        # come back at the alarm's volume.
+        if resume.volume is not None:
+            await self._call(
+                "media_player",
+                "volume_set",
+                {ATTR_ENTITY_ID: alarm.media_player, "volume_level": resume.volume},
+            )
+        await self._call(
+            "music_assistant",
+            "play_media",
+            {
+                ATTR_ENTITY_ID: alarm.media_player,
+                "media_id": resume.uri,
+                "enqueue": "play",
+            },
+        )
+        if resume.elapsed > 0:
+            await self._call(
+                "media_player",
+                "media_seek",
+                {ATTR_ENTITY_ID: alarm.media_player, "seek_position": resume.elapsed},
+            )
+        _LOGGER.info("Resumed %s on %s", resume.uri, alarm.media_player)
 
     # --- fade --------------------------------------------------------------
 
@@ -328,7 +438,9 @@ class WakeyPlayer:
         state.cancel()
         state.snoozed = True
         state.attempts = 0
-        await self._stop_playback(alarm)
+        # Resuming for the duration of the snooze is the point: the ambient
+        # audio comes back, and the next ring captures it again from scratch.
+        await self._stop_playback(alarm, state)
 
         delay = (minutes if minutes is not None else alarm.snooze_minutes) * 60
         state.unsubs.append(
@@ -359,7 +471,7 @@ class WakeyPlayer:
         state.cancel()
 
         if (alarm := self.store.async_get(alarm_id)) is not None:
-            await self._stop_playback(alarm)
+            await self._stop_playback(alarm, state)
             self.hass.bus.async_fire(
                 EVENT_ALARM_DISMISSED,
                 {ATTR_ALARM_ID: alarm_id, "name": alarm.name, "reason": reason},
@@ -377,7 +489,15 @@ class WakeyPlayer:
         for alarm_id in list(self.ringing):
             await self.async_snooze(alarm_id)
 
-    async def _stop_playback(self, alarm: AlarmEntry) -> None:
+    async def _stop_playback(self, alarm: AlarmEntry, state: RingState | None = None) -> None:
+        """Silence the alarm, by restoring what it interrupted where possible.
+
+        Restoring *instead of* pausing is what avoids a gap: the resume call
+        supersedes the alarm audio directly, so nothing needs silencing first.
+        """
+        if state is not None and state.resume is not None:
+            await self._async_restore_previous(alarm, state)
+            return
         current = self.hass.states.get(alarm.media_player)
         if current is None or current.state in (STATE_OFF, STATE_UNAVAILABLE):
             return
@@ -410,6 +530,35 @@ class WakeyPlayer:
             _LOGGER.warning("%s.%s failed (%s): %s", domain, service, data.get(ATTR_ENTITY_ID), err)
             return False
         return True
+
+    async def _call_with_response(
+        self, domain: str, service: str, data: dict
+    ) -> dict | None:
+        """Call a service that returns data, logging rather than raising.
+
+        Same contract as `_call`: a failure here degrades the ring (no resume)
+        rather than aborting it.
+        """
+        try:
+            async with asyncio.timeout(SERVICE_CALL_TIMEOUT):
+                return await self.hass.services.async_call(
+                    domain,
+                    service,
+                    data,
+                    blocking=True,
+                    return_response=True,
+                )
+        except TimeoutError:
+            _LOGGER.warning(
+                "%s.%s on %s did not return within %ss",
+                domain,
+                service,
+                data.get(ATTR_ENTITY_ID),
+                SERVICE_CALL_TIMEOUT,
+            )
+        except Exception as err:  # noqa: BLE001 - any failure here is non-fatal
+            _LOGGER.warning("%s.%s failed (%s): %s", domain, service, data.get(ATTR_ENTITY_ID), err)
+        return None
 
     @callback
     def async_shutdown(self) -> None:

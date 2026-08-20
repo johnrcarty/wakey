@@ -582,7 +582,8 @@ const ue = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], Re = () => ({
   snooze_minutes: 9,
   auto_dismiss_minutes: 30,
   enabled: !0,
-  notify_targets: []
+  notify_targets: [],
+  resume_previous: !1
 });
 async function je() {
   try {
@@ -920,6 +921,7 @@ let _ = class extends S {
       pre_alarm_minutes: "Pre-alarm lead time",
       pre_alarm_script: "Pre-alarm script",
       notify_targets: "Notify on ring",
+      resume_previous: "Resume previous playback",
       advanced: "Advanced"
     })[t.name] ?? t.name;
   }
@@ -1006,6 +1008,7 @@ let _ = class extends S {
       source_kind: t.source_kind ?? "music_assistant",
       volume: Number(t.volume ?? 0.7),
       fade_seconds: Number(t.fade_seconds ?? 0),
+      resume_previous: !!(t.resume_previous ?? !1),
       snooze_minutes: Number(t.snooze_minutes ?? 9),
       auto_dismiss_minutes: Number(t.auto_dismiss_minutes ?? 30),
       pre_alarm_minutes: Number(t.pre_alarm_minutes ?? 0),
@@ -1082,7 +1085,8 @@ let _ = class extends S {
           {
             name: "notify_targets",
             selector: { entity: { multiple: !0, filter: { domain: "notify" } } }
-          }
+          },
+          { name: "resume_previous", selector: { boolean: {} } }
         ]
       }
     ];

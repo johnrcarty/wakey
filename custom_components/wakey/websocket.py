@@ -63,6 +63,7 @@ _FIELDS = {
     vol.Optional("source_kind"): vol.In(SOURCE_KINDS),
     vol.Optional("volume"): vol.All(vol.Coerce(float), vol.Range(0.0, 1.0)),
     vol.Optional("fade_seconds"): vol.All(vol.Coerce(int), vol.Range(0, 3600)),
+    vol.Optional("resume_previous"): cv.boolean,
     vol.Optional("snooze_minutes"): vol.All(vol.Coerce(int), vol.Range(1, 120)),
     vol.Optional("auto_dismiss_minutes"): vol.All(vol.Coerce(int), vol.Range(1, 240)),
     vol.Optional("pre_alarm_minutes"): vol.All(vol.Coerce(int), vol.Range(0, 240)),

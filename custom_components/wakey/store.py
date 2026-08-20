@@ -62,6 +62,9 @@ class AlarmEntry:
     source_kind: str = SOURCE_MUSIC_ASSISTANT
     volume: float = DEFAULT_VOLUME
     fade_seconds: int = DEFAULT_FADE_SECONDS
+    # Put back whatever the speaker was playing when this alarm dismisses or
+    # snoozes. Music Assistant sources only — see WakeyPlayer._async_capture_resume.
+    resume_previous: bool = False
     snooze_minutes: int = DEFAULT_SNOOZE_MINUTES
     auto_dismiss_minutes: int = DEFAULT_AUTO_DISMISS_MINUTES
     # Optional hook: run a script this many minutes before the alarm (sunrise

@@ -80,6 +80,11 @@ create:
           min: 0
           max: 3600
           unit_of_measurement: s
+    resume_previous:
+      required: false
+      default: false
+      selector:
+        boolean:
     snooze_minutes:
       required: false
       default: 9
@@ -199,6 +204,9 @@ update:
           min: 0
           max: 3600
           unit_of_measurement: s
+    resume_previous:
+      selector:
+        boolean:
     snooze_minutes:
       selector:
         number:

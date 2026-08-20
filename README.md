@@ -96,7 +96,31 @@ data:
   fade_seconds: 60
   pre_alarm_minutes: 15
   pre_alarm_script: script.sunrise_lights
+  resume_previous: true
 ```
+
+### Resuming what the alarm interrupted
+
+If you fall asleep to ambient noise or a playlist on the same speaker the alarm
+targets, **Resume previous playback** (Advanced section of the alarm form, or
+`resume_previous: true`) puts it back when the alarm is dismissed or snoozed —
+same track, same position, same volume. Snoozing resumes it for the length of
+the snooze.
+
+By default this is off, and an alarm replaces whatever was playing.
+
+It works for **Music Assistant sources only**, and only when the speaker was
+already playing a Music Assistant queue. That is not an arbitrary restriction:
+`music_assistant.get_queue` is the only thing that reports both what is playing
+and how far into it you are, and a plain `media_player` has no queue to insert
+the alarm into without destroying it. Anything Wakey cannot resume from falls
+back to the normal behaviour — an alarm that reliably rings matters more than
+one that tidies up after itself.
+
+One trade-off worth knowing: resuming re-inserts the interrupted track rather
+than rewinding to it, so each ring leaves two spent items behind the play head
+in the Music Assistant queue. They never play again, and anything that starts a
+queue afresh clears them.
 
 ## Users and permissions
 
