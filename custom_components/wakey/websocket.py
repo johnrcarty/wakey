@@ -46,6 +46,7 @@ from .permissions import (
     async_visible_alarms,
     async_visible_ringing,
 )
+from .scheduler import CLEAR_ADJUSTMENT
 from .store import MEDIA_PLAYER_PREFIX
 
 _LOGGER = logging.getLogger(__name__)
@@ -184,6 +185,7 @@ def async_register(hass: HomeAssistant) -> None:
         ws_snooze,
         ws_dismiss,
         ws_skip_next,
+        ws_adjust_next,
         ws_trigger,
         ws_users_list,
         ws_policy_list,
@@ -379,6 +381,50 @@ def ws_skip_next(hass, connection, msg) -> None:
     async_assert_can_modify(data.store, msg[ATTR_ALARM_ID], user_id, is_admin)
 
     data.store.async_update(msg[ATTR_ALARM_ID], {"skip_next": msg["skip"]})
+    connection.send_result(msg["id"])
+
+
+@_guard
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/adjust_next",
+        vol.Required(ATTR_ALARM_ID): str,
+        vol.Optional("time"): str,
+        vol.Optional("clear", default=False): bool,
+    }
+)
+@callback
+def ws_adjust_next(hass, connection, msg) -> None:
+    """Move just the next occurrence of an alarm, or put it back.
+
+    The occurrence is never named by the caller: the scheduler resolves it, so
+    a panel that has been open since yesterday cannot move the wrong day.
+    """
+    data = _get_data(hass)
+    if data is None:
+        connection.send_error(msg["id"], ERR_NOT_LOADED, "Wakey is not set up")
+        return
+    user_id, is_admin = _caller(connection)
+    alarm = async_assert_can_modify(data.store, msg[ATTR_ALARM_ID], user_id, is_admin)
+
+    if msg["clear"]:
+        data.store.async_update(alarm.id, dict(CLEAR_ADJUSTMENT))
+        connection.send_result(msg["id"])
+        return
+
+    if (time_str := msg.get("time")) is None:
+        connection.send_error(
+            msg["id"], ERR_INVALID_FORMAT, "No time to move the alarm to"
+        )
+        return
+
+    try:
+        patch = data.scheduler.async_plan_adjustment(alarm, time_str)
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_INVALID_FORMAT, str(err))
+        return
+
+    data.store.async_update(alarm.id, patch)
     connection.send_result(msg["id"])
 
 

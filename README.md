@@ -40,6 +40,10 @@ Bug reports are very welcome.
   fails silently is worse than no alarm.
 - **Skip next.** Off tomorrow? Skip one occurrence without disarming the alarm
   and forgetting to turn it back on. The flag clears itself afterwards.
+- **Adjust next.** Need to be up an hour earlier tomorrow, or get a lie-in?
+  Move just the next occurrence. It rings once at the new time and goes back to
+  its usual schedule on its own — no second alarm to toggle between, nothing to
+  remember to change back.
 - **A pre-alarm hook.** Run a script a set number of minutes before — sunrise
   lights, heating, a kettle.
 - **Survives a restart.** If Home Assistant was down when an alarm was due, it
@@ -98,6 +102,31 @@ data:
   pre_alarm_script: script.sunrise_lights
   resume_previous: true
 ```
+
+### Moving one occurrence
+
+**Adjust next** on an alarm card moves the next occurrence only, to another
+time on the same day. The card shows what it will do (`Tomorrow at 05:30`), and
+**Back to 07:00** in the same dialog undoes it. Once that day is over the alarm
+is back to normal by itself.
+
+```yaml
+action: wakey.adjust_next
+data:
+  alarm_id: 8f1c2b3a4d5e6f7a8b9c0d1e2f3a4b5c
+  time: "05:30"
+```
+
+You never say *which* occurrence: it is always the next one this alarm would
+ring, worked out when the action runs, so adjusting twice moves the same
+morning again rather than booking the one after it. Pass `clear: true` instead
+of a time to restore the usual time. A time that has already gone by is
+refused rather than quietly landing on the wrong day, and setting an
+adjustment cancels a pending **Skip next** (and vice versa) — an occurrence is
+either moved or skipped, never both.
+
+For a different *day*, make a second alarm — this deliberately does not move an
+alarm off its own date.
 
 ### Resuming what the alarm interrupted
 
@@ -160,6 +189,7 @@ still play music on any speaker directly, exactly as they always could.
 | `wakey.snooze` | Silence a ringing alarm; omit `alarm_id` for whatever is ringing |
 | `wakey.dismiss` | Stop until the next occurrence |
 | `wakey.skip_next` | Skip one occurrence, then resume |
+| `wakey.adjust_next` | Move the next occurrence to another time that day (`clear: true` to undo) |
 | `wakey.trigger_now` | Fire immediately — use this to test a speaker and source |
 
 ## Entities

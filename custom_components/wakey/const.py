@@ -6,7 +6,7 @@ from homeassistant.const import Platform
 
 DOMAIN = "wakey"
 NAME = "Wakey"
-VERSION = "0.2.0"
+VERSION = "0.5.0"
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -64,6 +64,10 @@ ATTR_REPEAT = "repeat"
 ATTR_WEEKDAYS = "weekdays"
 ATTR_DATE = "date"
 ATTR_SKIP_NEXT = "skip_next"
+# One-time adjustment. ATTR_OVERRIDE_FOR is the local date of the occurrence
+# that was moved, ATTR_OVERRIDE_TIME the wall clock it rings at instead.
+ATTR_OVERRIDE_FOR = "override_for"
+ATTR_OVERRIDE_TIME = "override_time"
 ATTR_MEDIA_PLAYER = "media_player"
 ATTR_SOURCE_URI = "source_uri"
 ATTR_SOURCE_KIND = "source_kind"

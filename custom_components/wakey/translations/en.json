@@ -104,6 +104,15 @@
         "skip": { "name": "Skip", "description": "Turn off to cancel a previously requested skip." }
       }
     },
+    "adjust_next": {
+      "name": "Adjust next",
+      "description": "Moves only the next occurrence to a different time on the same day. It rings once at the new time, then goes back to the usual schedule by itself.",
+      "fields": {
+        "alarm_id": { "name": "Alarm ID", "description": "The alarm to adjust." },
+        "time": { "name": "Time", "description": "The time the next occurrence should ring at instead." },
+        "clear": { "name": "Clear", "description": "Turn on to cancel the adjustment and restore the usual time." }
+      }
+    },
     "trigger_now": {
       "name": "Trigger now",
       "description": "Fires an alarm immediately. Useful for checking that a speaker and source actually work.",

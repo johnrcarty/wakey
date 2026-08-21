@@ -23,6 +23,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .const import (
     ATTR_ALARM_ID,
     ATTR_OWNER_ID,
+    ATTR_TIME,
     DOMAIN,
     EVENT_MOBILE_APP_NOTIFICATION_ACTION,
     PLATFORMS,
@@ -41,7 +42,7 @@ from .permissions import (
     async_visible_ringing,
 )
 from .player import WakeyPlayer
-from .scheduler import WakeyScheduler
+from .scheduler import CLEAR_ADJUSTMENT, WakeyScheduler
 from .store import WakeyStore
 from .websocket import async_register as async_register_websocket
 
@@ -53,6 +54,7 @@ SERVICE_DELETE = "delete"
 SERVICE_SNOOZE = "snooze"
 SERVICE_DISMISS = "dismiss"
 SERVICE_SKIP_NEXT = "skip_next"
+SERVICE_ADJUST_NEXT = "adjust_next"
 SERVICE_TRIGGER_NOW = "trigger_now"
 
 # Fields shared by create and update. Everything except the identity of the
@@ -99,6 +101,15 @@ SNOOZE_SCHEMA = vol.Schema(
 DISMISS_SCHEMA = vol.Schema({vol.Optional(ATTR_ALARM_ID): cv.string})
 SKIP_SCHEMA = vol.Schema(
     {vol.Required(ATTR_ALARM_ID): cv.string, vol.Optional("skip", default=True): cv.boolean}
+)
+# Which occurrence is being moved is never passed in — it is always the next
+# one, resolved at the moment of the call. See WakeyScheduler.async_plan_adjustment.
+ADJUST_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ALARM_ID): cv.string,
+        vol.Optional(ATTR_TIME): cv.string,
+        vol.Optional("clear", default=False): cv.boolean,
+    }
 )
 
 
@@ -176,6 +187,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             SERVICE_SNOOZE,
             SERVICE_DISMISS,
             SERVICE_SKIP_NEXT,
+            SERVICE_ADJUST_NEXT,
             SERVICE_TRIGGER_NOW,
         ):
             hass.services.async_remove(DOMAIN, service)
@@ -412,6 +424,38 @@ def _async_register_services(hass: HomeAssistant) -> None:
             raise _denied(call, err) from err
         data.store.async_update(alarm_id, {"skip_next": call.data["skip"]})
 
+    async def _adjust_next(call: ServiceCall) -> None:
+        if (data := _get_data(hass)) is None:
+            return
+        user_id, is_admin = await _async_caller(hass, call)
+        alarm_id = call.data[ATTR_ALARM_ID]
+        try:
+            alarm = async_assert_can_modify(data.store, alarm_id, user_id, is_admin)
+        except WakeyPermissionError as err:
+            raise _denied(call, err) from err
+
+        if call.data["clear"]:
+            data.store.async_update(alarm_id, dict(CLEAR_ADJUSTMENT))
+            return
+
+        if (time_str := call.data.get(ATTR_TIME)) is None:
+            raise ServiceValidationError(
+                "Pass a time to move the next occurrence to, or clear: true to "
+                "put it back"
+            )
+        try:
+            patch = data.scheduler.async_plan_adjustment(alarm, time_str)
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+
+        data.store.async_update(alarm_id, patch)
+        _LOGGER.info(
+            "The %s occurrence of %s moves to %s, just this once",
+            patch["override_for"],
+            alarm.name,
+            patch["override_time"],
+        )
+
     async def _trigger_now(call: ServiceCall) -> None:
         if (data := _get_data(hass)) is None:
             return
@@ -430,6 +474,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
         (SERVICE_SNOOZE, _snooze, SNOOZE_SCHEMA),
         (SERVICE_DISMISS, _dismiss, DISMISS_SCHEMA),
         (SERVICE_SKIP_NEXT, _skip_next, SKIP_SCHEMA),
+        (SERVICE_ADJUST_NEXT, _adjust_next, ADJUST_SCHEMA),
         (SERVICE_TRIGGER_NOW, _trigger_now, TARGET_SCHEMA),
     ):
         hass.services.async_register(DOMAIN, service, handler, schema=schema)

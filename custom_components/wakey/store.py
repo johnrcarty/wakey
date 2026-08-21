@@ -57,6 +57,12 @@ class AlarmEntry:
     weekdays: list[int] = field(default_factory=lambda: [0, 1, 2, 3, 4])
     date: str | None = None
     skip_next: bool = False
+    # One-time adjustment: move a single occurrence to a different time on the
+    # same day, then revert. override_for is the local date of the occurrence
+    # being moved, override_time the wall clock it should ring at instead.
+    # Both are cleared once that occurrence has been and gone.
+    override_for: str | None = None
+    override_time: str | None = None
     media_player: str = ""
     source_uri: str = ""
     source_kind: str = SOURCE_MUSIC_ASSISTANT
@@ -181,12 +187,13 @@ def coerce(data: dict[str, Any]) -> dict[str, Any]:
         owner = str(out["owner_id"]).strip()
         out["owner_id"] = owner or None
 
-    if "time" in out and isinstance(out["time"], str):
-        parts = out["time"].split(":")
-        try:
-            out["time"] = f"{int(parts[0]):02d}:{int(parts[1]):02d}"
-        except (ValueError, IndexError):
-            out.pop("time")
+    for key in ("override_time", "time"):
+        if key in out and isinstance(out[key], str):
+            parts = out[key].split(":")
+            try:
+                out[key] = f"{int(parts[0]):02d}:{int(parts[1]):02d}"
+            except (ValueError, IndexError):
+                out.pop(key)
 
     return out
 
@@ -320,6 +327,17 @@ class WakeyStore:
 
         payload = coerce(changes)
         payload.pop("id", None)
+
+        # skip_next and a one-time adjustment are two ways of saying "not the
+        # usual next occurrence". Letting both stand leaves two one-shot flags
+        # racing to be consumed, so setting either one clears the other. Done
+        # here rather than at each entry point because this is the single
+        # place every mutation passes through.
+        if payload.get("skip_next"):
+            payload.setdefault("override_for", None)
+            payload.setdefault("override_time", None)
+        elif payload.get("override_time"):
+            payload.setdefault("skip_next", False)
 
         # Compare before writing. Without this a no-op write (very easy to
         # produce from the time entity, which re-reads state after every

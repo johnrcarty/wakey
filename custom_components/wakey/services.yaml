@@ -283,6 +283,23 @@ skip_next:
       selector:
         boolean:
 
+adjust_next:
+  fields:
+    alarm_id:
+      required: true
+      selector:
+        text:
+    time:
+      required: false
+      example: "05:30"
+      selector:
+        time:
+    clear:
+      required: false
+      default: false
+      selector:
+        boolean:
+
 trigger_now:
   fields:
     alarm_id:

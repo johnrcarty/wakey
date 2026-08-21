@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.5.0
+
+### Added
+
+- **Adjust next.** Move a single occurrence of an alarm to another time on the
+  same day. It rings once at the new time and returns to its usual schedule on
+  its own, so there is no second alarm to toggle between and nothing to
+  remember to change back. Available from the alarm card in the panel, and as
+  `wakey.adjust_next` (`clear: true` undoes it).
+  - Which occurrence gets moved is resolved when the call is made, never passed
+    in, so a panel left open overnight cannot move the wrong day.
+  - A time that has already passed is refused; an adjustment and a pending
+    **Skip next** cancel each other out.
+  - The alarm's usual time on that date stays suppressed for the rest of the
+    day, so a moved alarm cannot also go off at the time it moved from.
+  - Missed-alarm catch-up after a restart looks for the moved time, not the
+    original one.
+
+### Fixed
+
+- The device shown for each alarm reported `sw_version` 0.2.0 regardless of the
+  version actually installed.
+
 ## 0.4.0
 
 ### Added

@@ -242,3 +242,129 @@ def test_garbage_time_returns_none_rather_than_raising():
         )
         is None
     )
+
+
+# --- one-time adjustments --------------------------------------------------
+
+
+def test_adjustment_moves_only_the_named_day():
+    """The moved occurrence rings early; the one after it is untouched."""
+    now = _utc(2026, 8, 20, 18, 0)  # Thursday evening
+    kwargs = dict(
+        time_str="07:00",
+        repeat="weekly",
+        weekdays=WEEKDAYS,
+        one_off_date=None,
+        tz=NY,
+        now_utc=now,
+        override_for="2026-08-21",
+        override_time="05:30",
+    )
+
+    moved = occurrence.next_occurrence(**kwargs)
+    assert moved.astimezone(NY).replace(tzinfo=None) == datetime(2026, 8, 21, 5, 30)
+
+    # skip_next reaches past it to Monday, back at the usual time.
+    following = occurrence.next_occurrence(**{**kwargs, "skip_next": True})
+    assert following.astimezone(NY).replace(tzinfo=None) == datetime(2026, 8, 24, 7, 0)
+
+
+def test_adjustment_replaces_rather_than_adds():
+    """Moving an occurrence must not leave the original time ringing too.
+
+    The worst version of this bug is silent: the alarm goes off early as
+    asked, and then again at its usual time.
+    """
+    fired_at = _utc(2026, 8, 21, 5, 30)
+    following = occurrence.next_occurrence(
+        time_str="07:00",
+        repeat="weekly",
+        weekdays=WEEKDAYS,
+        one_off_date=None,
+        tz=NY,
+        now_utc=fired_at,
+        override_for="2026-08-21",
+        override_time="05:30",
+    )
+    assert following.astimezone(NY).date() == date(2026, 8, 24)
+
+
+def test_adjustment_for_a_different_day_is_inert():
+    """A spent adjustment left on the alarm changes nothing."""
+    now = _utc(2026, 8, 20, 18, 0)
+    result = occurrence.next_occurrence(
+        time_str="07:00",
+        repeat="weekly",
+        weekdays=WEEKDAYS,
+        one_off_date=None,
+        tz=NY,
+        now_utc=now,
+        override_for="2026-08-14",
+        override_time="05:30",
+    )
+    assert result.astimezone(NY).replace(tzinfo=None) == datetime(2026, 8, 21, 7, 0)
+
+
+def test_adjustment_earlier_than_now_is_missed_not_fired_late():
+    """06:00, alarm moved to 05:30 today: today is gone, not owed."""
+    now = _utc(2026, 8, 21, 6, 0)
+    result = occurrence.next_occurrence(
+        time_str="07:00",
+        repeat="weekly",
+        weekdays=WEEKDAYS,
+        one_off_date=None,
+        tz=NY,
+        now_utc=now,
+        override_for="2026-08-21",
+        override_time="05:30",
+    )
+    assert result.astimezone(NY).replace(tzinfo=None) == datetime(2026, 8, 24, 7, 0)
+
+
+def test_previous_occurrence_sees_the_adjustment():
+    """Catch-up after a restart must look for the moved time, not the usual one."""
+    now = _utc(2026, 8, 21, 5, 35)
+    previous = occurrence.previous_occurrence(
+        time_str="07:00",
+        repeat="weekly",
+        weekdays=WEEKDAYS,
+        one_off_date=None,
+        tz=NY,
+        now_utc=now,
+        override_for="2026-08-21",
+        override_time="05:30",
+    )
+    assert previous.astimezone(NY).replace(tzinfo=None) == datetime(2026, 8, 21, 5, 30)
+
+
+def test_adjustment_into_the_spring_forward_gap():
+    """Moved to a wall clock that does not exist: same rule as a normal time."""
+    now = _utc(2026, 3, 7, 18, 0)
+    result = occurrence.next_occurrence(
+        time_str="07:00",
+        repeat="weekly",
+        weekdays=[0, 1, 2, 3, 4, 5, 6],
+        one_off_date=None,
+        tz=NY,
+        now_utc=now,
+        override_for="2026-03-08",
+        override_time="02:30",
+    )
+    local = result.astimezone(NY)
+    assert (local.hour, local.minute) == (3, 0)
+
+
+def test_unreadable_adjustment_falls_back_to_the_configured_time():
+    """A corrupt adjustment must not take the alarm out of service."""
+    now = _utc(2026, 8, 20, 18, 0)
+    result = occurrence.next_occurrence(
+        time_str="07:00",
+        repeat="weekly",
+        weekdays=WEEKDAYS,
+        one_off_date=None,
+        tz=NY,
+        now_utc=now,
+        override_for="2026-08-21",
+        override_time="not a time",
+    )
+    assert result.astimezone(NY).replace(tzinfo=None) == datetime(2026, 8, 21, 7, 0)

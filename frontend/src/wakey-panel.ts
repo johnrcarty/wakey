@@ -27,6 +27,8 @@ export class WakeyPanel extends LitElement {
   @state() private _dialogOpen = false;
   @state() private _editing: string | null = null;
   @state() private _draft: Record<string, any> = {};
+  @state() private _adjusting: string | null = null;
+  @state() private _adjustTime = "";
   @state() private _haForm = false;
 
   private _unsub?: () => void;
@@ -83,11 +85,13 @@ export class WakeyPanel extends LitElement {
 
   // --- actions -----------------------------------------------------------
 
-  private async _call(msg: Record<string, unknown>): Promise<void> {
+  private async _call(msg: Record<string, unknown>): Promise<boolean> {
     try {
       await this.hass.callWS(msg);
+      return true;
     } catch (err: any) {
       this._error = err?.message ?? String(err);
+      return false;
     }
   }
 
@@ -97,6 +101,42 @@ export class WakeyPanel extends LitElement {
 
   private _skip(alarm: Alarm) {
     this._call({ type: "wakey/skip_next", alarm_id: alarm.id, skip: !alarm.skip_next });
+  }
+
+  /**
+   * Whether a one-time adjustment is still ahead of us.
+   *
+   * The backend clears a spent adjustment on its next scheduling pass, which
+   * can be a while after the day itself has gone. Checking the date here
+   * keeps a dead one off the card in the meantime.
+   */
+  private _adjusted(alarm: Alarm): boolean {
+    if (!alarm.override_for || !alarm.override_time) return false;
+    return alarm.override_for >= new Date().toLocaleDateString("en-CA");
+  }
+
+  private _openAdjust(alarm: Alarm) {
+    this._adjusting = alarm.id;
+    this._adjustTime = alarm.override_time ?? alarm.time;
+  }
+
+  private async _saveAdjust() {
+    const id = this._adjusting;
+    if (!id || !this._adjustTime) return;
+    const ok = await this._call({
+      type: "wakey/adjust_next",
+      alarm_id: id,
+      time: this._adjustTime.slice(0, 5),
+    });
+    // A refused time — one that has already gone by — leaves the dialog up
+    // with the error showing, so it can be corrected rather than retyped.
+    if (ok) this._adjusting = null;
+  }
+
+  private async _clearAdjust(alarm: Alarm) {
+    if (await this._call({ type: "wakey/adjust_next", alarm_id: alarm.id, clear: true })) {
+      this._adjusting = null;
+    }
   }
 
   private _delete(alarm: Alarm) {
@@ -296,6 +336,45 @@ export class WakeyPanel extends LitElement {
     return then.toLocaleDateString(undefined, { weekday: "long" });
   }
 
+  private _fmtAdjusted(alarm: Alarm): string {
+    const today = new Date().toLocaleDateString("en-CA");
+    if (alarm.override_for === today) return `Today at ${alarm.override_time}`;
+    const day = new Date(`${alarm.override_for}T00:00:00`);
+    return `${day.toLocaleDateString(undefined, { weekday: "long" })} at ${alarm.override_time}`;
+  }
+
+  private _renderAdjustDialog() {
+    const alarm = this._alarms.find((a) => a.id === this._adjusting);
+    if (!alarm) return nothing;
+    return html`
+      <div class="scrim" @click=${() => (this._adjusting = null)}></div>
+      <div class="dialog" role="dialog" aria-modal="true">
+        <h2>Adjust next</h2>
+        <p class="sub">
+          Just this once. ${alarm.name} rings at the new time, then goes back to
+          ${alarm.time} on its own.
+        </p>
+        <label>
+          Time
+          <input
+            type="time"
+            .value=${this._adjustTime}
+            @input=${(e: any) => (this._adjustTime = e.target.value)}
+          />
+        </label>
+        <div class="dialog-actions">
+          ${this._adjusted(alarm)
+            ? html`<button @click=${() => this._clearAdjust(alarm)}>
+                Back to ${alarm.time}
+              </button>`
+            : nothing}
+          <button @click=${() => (this._adjusting = null)}>Cancel</button>
+          <button class="primary" @click=${this._saveAdjust}>Save</button>
+        </div>
+      </div>
+    `;
+  }
+
   private _renderAlarm(alarm: Alarm) {
     const days =
       alarm.repeat === "once"
@@ -329,11 +408,14 @@ export class WakeyPanel extends LitElement {
             <div class="next">${this._fmtNext(alarm)}</div>
           </div>
         </div>
-        ${alarm.is_ringing || alarm.is_snoozed || alarm.skip_next
+        ${alarm.is_ringing || alarm.is_snoozed || alarm.skip_next || this._adjusted(alarm)
           ? html`<div class="flags">
               ${alarm.is_ringing ? html`<span class="flag ring">Ringing</span>` : nothing}
               ${alarm.is_snoozed ? html`<span class="flag">Snoozed</span>` : nothing}
               ${alarm.skip_next ? html`<span class="flag">Skipping next</span>` : nothing}
+              ${this._adjusted(alarm)
+                ? html`<span class="flag">${this._fmtAdjusted(alarm)}</span>`
+                : nothing}
             </div>`
           : nothing}
         ${html`<div class="actions">
@@ -341,6 +423,7 @@ export class WakeyPanel extends LitElement {
               <button @click=${() => this._skip(alarm)}>
                 ${alarm.skip_next ? "Don't skip" : "Skip next"}
               </button>
+              <button @click=${() => this._openAdjust(alarm)}>Adjust next</button>
               <button @click=${() => this._trigger(alarm)}>Test</button>
               <button class="danger" @click=${() => this._delete(alarm)}>Delete</button>
             </div>`}
@@ -452,6 +535,7 @@ export class WakeyPanel extends LitElement {
       </div>
 
       ${this._renderDialog()}
+      ${this._adjusting ? this._renderAdjustDialog() : nothing}
     `;
   }
 

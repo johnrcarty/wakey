@@ -7,6 +7,10 @@ export interface Alarm {
   weekdays: number[];
   date: string | null;
   skip_next: boolean;
+  /** Local date of the occurrence a one-time adjustment moves, or null. */
+  override_for: string | null;
+  /** The time that occurrence rings at instead, "HH:MM", or null. */
+  override_time: string | null;
   media_player: string;
   source_uri: string;
   source_kind: "music_assistant" | "media_player";

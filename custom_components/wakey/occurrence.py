@@ -58,6 +58,30 @@ def to_utc(naive_local: datetime, tz: tzinfo) -> datetime:
     return hi.replace(microsecond=0)
 
 
+def _instant_for(
+    day: date,
+    alarm_time: time,
+    tz: tzinfo,
+    override_for: str | None,
+    override_time: str | None,
+) -> datetime:
+    """The UTC instant this alarm lands on for one local day.
+
+    A one-time adjustment replaces the wall clock on exactly one date and
+    changes nothing else, so it is applied here rather than by the callers.
+    Every lookup — next, next-but-one, previous — then agrees about which
+    occurrence was moved and where it went.
+    """
+    if override_for and override_time and day.isoformat() == override_for:
+        try:
+            return to_utc(datetime.combine(day, parse_time(override_time)), tz)
+        except (ValueError, IndexError):
+            # An unreadable adjustment must not take the alarm out entirely;
+            # fall back to the time the user actually configured.
+            pass
+    return to_utc(datetime.combine(day, alarm_time), tz)
+
+
 def _matches(day: date, repeat: str, weekdays: list[int] | None) -> bool:
     if repeat == REPEAT_WEEKLY:
         return bool(weekdays) and day.weekday() in weekdays
@@ -82,6 +106,8 @@ def next_occurrence(
     tz: tzinfo,
     now_utc: datetime,
     skip_next: bool = False,
+    override_for: str | None = None,
+    override_time: str | None = None,
 ) -> datetime | None:
     """Return the next UTC instant this alarm should fire, or None.
 
@@ -98,7 +124,7 @@ def next_occurrence(
     for day in _candidate_days(repeat, one_off_date, anchor, forward=True):
         if not _matches(day, repeat, weekdays):
             continue
-        instant = to_utc(datetime.combine(day, alarm_time), tz)
+        instant = _instant_for(day, alarm_time, tz, override_for, override_time)
         if instant > now_utc:
             hits.append(instant)
             # Only ever need two: the next one, and the one after it for
@@ -121,6 +147,8 @@ def previous_occurrence(
     one_off_date: str | None,
     tz: tzinfo,
     now_utc: datetime,
+    override_for: str | None = None,
+    override_time: str | None = None,
 ) -> datetime | None:
     """Return the most recent UTC instant at or before now, or None.
 
@@ -136,7 +164,7 @@ def previous_occurrence(
     for day in _candidate_days(repeat, one_off_date, anchor, forward=False):
         if not _matches(day, repeat, weekdays):
             continue
-        instant = to_utc(datetime.combine(day, alarm_time), tz)
+        instant = _instant_for(day, alarm_time, tz, override_for, override_time)
         if instant <= now_utc:
             return instant
     return None

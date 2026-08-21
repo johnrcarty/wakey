@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta, tzinfo
+from datetime import date, datetime, timedelta, tzinfo
 from zoneinfo import ZoneInfo
 
 from homeassistant.const import EVENT_CORE_CONFIG_UPDATE, EVENT_HOMEASSISTANT_STARTED
@@ -28,6 +28,9 @@ from .const import (
 from .store import AlarmEntry, WakeyStore
 
 _LOGGER = logging.getLogger(__name__)
+
+# The patch that puts an alarm back on its usual schedule.
+CLEAR_ADJUSTMENT: dict[str, str | None] = {"override_for": None, "override_time": None}
 
 FireCallback = Callable[[AlarmEntry, bool], Awaitable[None]]
 PreFireCallback = Callable[[AlarmEntry], Awaitable[None]]
@@ -50,6 +53,10 @@ class WakeyScheduler:
         self._timers: dict[str, CALLBACK_TYPE] = {}
         self._pre_timers: dict[str, CALLBACK_TYPE] = {}
         self._unsubs: list[CALLBACK_TYPE] = []
+        # Set once the missed-alarm catch-up has run. Spent one-time
+        # adjustments are not cleared out before then — see
+        # _purge_expired_adjustments.
+        self._caught_up = False
 
     # --- lifecycle ---------------------------------------------------------
 
@@ -88,6 +95,9 @@ class WakeyScheduler:
             return tz
         return ZoneInfo(self.hass.config.time_zone)
 
+    def _today(self) -> date:
+        return dt_util.utcnow().astimezone(self._tz()).date()
+
     @callback
     def async_next_fire(self, alarm: AlarmEntry) -> datetime | None:
         """Effective next fire time, honouring skip_next. Used by sensors."""
@@ -101,6 +111,8 @@ class WakeyScheduler:
             tz=self._tz(),
             now_utc=dt_util.utcnow(),
             skip_next=alarm.skip_next,
+            override_for=alarm.override_for,
+            override_time=alarm.override_time,
         )
 
     @callback
@@ -121,10 +133,83 @@ class WakeyScheduler:
             one_off_date=alarm.date,
             tz=self._tz(),
             now_utc=dt_util.utcnow(),
+            override_for=alarm.override_for,
+            override_time=alarm.override_time,
         )
 
     @callback
+    def async_plan_adjustment(self, alarm: AlarmEntry, time_str: str) -> dict[str, str]:
+        """Work out which occurrence a one-time adjustment moves, and to when.
+
+        Returns the patch to hand to the store. Callers never name the
+        occurrence themselves: it is always the next one this alarm would
+        ring, resolved here, so a stale panel or a slow automation cannot move
+        the wrong day.
+
+        Raises ValueError — with a message meant for the person who asked —
+        when there is nothing to move or the new time has already gone by.
+        """
+        try:
+            new_time = occurrence.parse_time(time_str)
+        except (ValueError, IndexError):
+            raise ValueError(f"{time_str} is not a time in HH:MM form") from None
+
+        # Deliberately the raw next fire: it already accounts for an existing
+        # adjustment, so adjusting twice moves the same occurrence again
+        # rather than reaching past it to the one after.
+        nxt = self._raw_next_fire(alarm)
+        if nxt is None:
+            raise ValueError(
+                f"{alarm.name} has no upcoming occurrence to move — it is "
+                "switched off, or nothing is scheduled"
+            )
+
+        tz = self._tz()
+        day = nxt.astimezone(tz).date()
+        moved_to = f"{new_time.hour:02d}:{new_time.minute:02d}"
+        if occurrence.to_utc(datetime.combine(day, new_time), tz) <= dt_util.utcnow():
+            raise ValueError(f"{moved_to} on {day.isoformat()} has already passed")
+
+        return {"override_for": day.isoformat(), "override_time": moved_to}
+
+    @callback
+    def _purge_expired_adjustments(self) -> bool:
+        """Clear a one-time adjustment whose day has gone. True if one was.
+
+        This is the only thing that ends an adjustment, and it deliberately
+        waits for the whole day to pass rather than clearing when the moved
+        occurrence rings. The adjustment is what suppresses the alarm's usual
+        time on that date: drop it at 05:30 and the 07:00 it replaced is
+        suddenly back on, and the alarm goes off twice in one morning.
+
+        Held back until the missed-alarm catch-up has run, because catch-up is
+        what decides whether yesterday's moved occurrence still deserves to
+        fire.
+        """
+        if not self._caught_up:
+            return False
+        today = self._today()
+        for alarm in self.store.async_all():
+            if not alarm.override_for:
+                continue
+            try:
+                expired = date.fromisoformat(alarm.override_for) < today
+            except ValueError:
+                expired = True  # unreadable date: no occurrence can match it
+            if expired:
+                # One at a time: the store dispatches, which reschedules, and
+                # that pass clears the next one. Mutating the store from
+                # inside our own scheduling loop is what we are avoiding.
+                self.store.async_update(alarm.id, dict(CLEAR_ADJUSTMENT))
+                return True
+        return False
+
+    @callback
     def async_reschedule_all(self) -> None:
+        if self._purge_expired_adjustments():
+            # Clearing dispatched a change, which has already rescheduled
+            # everything; carrying on here would double the timers up.
+            return
         self._cancel_all()
         for alarm in self.store.async_all():
             self._schedule(alarm)
@@ -243,6 +328,8 @@ class WakeyScheduler:
                 one_off_date=alarm.date,
                 tz=tz,
                 now_utc=now,
+                override_for=alarm.override_for,
+                override_time=alarm.override_time,
             )
             if previous is None:
                 continue
@@ -277,4 +364,5 @@ class WakeyScheduler:
             )
             await self._fire(alarm, True)
 
+        self._caught_up = True
         async_dispatcher_send(self.hass, SIGNAL_RUNTIME_CHANGED)

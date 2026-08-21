@@ -105,6 +105,7 @@ async def test_service_create_stamps_the_calling_user(hass, entry, kid_user) -> 
         ("delete", {}),
         ("trigger_now", {}),
         ("skip_next", {}),
+        ("adjust_next", {"time": "03:00"}),
     ],
 )
 async def test_services_refuse_another_users_alarm(

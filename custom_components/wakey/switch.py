@@ -61,6 +61,8 @@ class WakeyAlarmSwitch(WakeyAlarmEntity, SwitchEntity):
             "weekdays": alarm.weekdays,
             "date": alarm.date,
             "skip_next": alarm.skip_next,
+            "override_for": alarm.override_for,
+            "override_time": alarm.override_time,
             "media_player": alarm.media_player,
             "volume": alarm.volume,
             "ringing": self._alarm_id in self._data.player.ringing,
