@@ -350,7 +350,7 @@ export class WakeyPanel extends LitElement {
       <div class="scrim" @click=${() => (this._adjusting = null)}></div>
       <div class="dialog" role="dialog" aria-modal="true">
         <h2>Adjust next</h2>
-        <p class="sub">
+        <p class="hint">
           Just this once. ${alarm.name} rings at the new time, then goes back to
           ${alarm.time} on its own.
         </p>
@@ -712,6 +712,12 @@ export class WakeyPanel extends LitElement {
       border-radius: var(--ha-card-border-radius, 12px);
       padding: 20px;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    .dialog .hint {
+      margin: -8px 0 16px;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--secondary-text-color, #727272);
     }
     .dialog h2 {
       margin: 0 0 16px;
