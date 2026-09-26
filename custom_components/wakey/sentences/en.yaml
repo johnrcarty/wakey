@@ -1,0 +1,17 @@
+# Managed by the Wakey integration — do not edit here.
+# Add your own phrasings in a separate file in this directory; the
+# conversation agent merges every *.yaml file it finds.
+language: "en"
+intents:
+  WakeySnooze:
+    data:
+      - sentences:
+          - "snooze"
+          - "snooze [the] alarm"
+  WakeyDismiss:
+    data:
+      - sentences:
+          - "cancel"
+          - "cancel [the] alarm"
+          - "stop [the] alarm"
+          - "dismiss [the] alarm"

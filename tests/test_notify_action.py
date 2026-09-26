@@ -17,6 +17,7 @@ ALARM = {
 
 @pytest.fixture
 async def entry(hass: HomeAssistant) -> MockConfigEntry:
+    hass.states.async_set(ALARM["media_player"], "playing")
     config_entry = MockConfigEntry(domain=DOMAIN, data={}, title="Wakey")
     config_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(config_entry.entry_id)

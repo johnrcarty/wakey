@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Opt-in **Repeat audio until dismissed** for single alarm tracks (#13).
+  Use native repeat-one when supported, otherwise replay only after a clip's
+  reported duration and position indicate completion. Snooze, dismiss,
+  auto-dismiss, failure, and unload clean up repeat state. The setting defaults
+  to off for existing and new alarms.
+
+### Documentation
+
+- Explain native-speaker playback without Music Assistant, supported sources,
+  search and resume limitations, and the playback failsafe. Source-field help
+  now makes the Music Assistant requirement for search explicit (#14).
+
+### Fixed
+
+- Pausing or turning off a ringing alarm outside Wakey, including a bare
+  "stop" to Assist, now dismisses it (reason `external`) instead of restarting
+  playback and then reporting a false failure (#3).
+- The playback failsafe is no longer satisfied by audio that was already
+  playing on the speaker. When the player reports `media_content_id`, the
+  alarm must replace it; otherwise the old state check applies (#4).
+- Short clips observed playing no longer trigger a false playback failure
+  after they end. Replays preserve the fade, resume snapshot, and auto-dismiss
+  deadline; failed playback clears the ringing state and pending work.
+- Voice commands now ship English and German sentences in both language
+  directories, including when Assist uses a different language from the
+  Home Assistant instance. Reload cached conversation sentences when the
+  managed files change (#12).
+- Snooze, auto-dismiss, and playback verification timers now run on Home
+  Assistant's event loop. Their previous callbacks ran in worker threads and
+  were rejected by Home Assistant's thread-safety checks (#11). Cancelled
+  callbacks cannot affect a later ring of the same alarm.
+
 ## 0.5.1
 
 ### Fixed

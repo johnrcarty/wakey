@@ -209,6 +209,7 @@ export class WakeyPanel extends LitElement {
       volume: Number(d.volume ?? 0.7),
       fade_seconds: Number(d.fade_seconds ?? 0),
       resume_previous: Boolean(d.resume_previous ?? false),
+      repeat_playback: Boolean(d.repeat_playback ?? false),
       snooze_minutes: Number(d.snooze_minutes ?? 9),
       auto_dismiss_minutes: Number(d.auto_dismiss_minutes ?? 30),
       pre_alarm_minutes: Number(d.pre_alarm_minutes ?? 0),
@@ -278,6 +279,7 @@ export class WakeyPanel extends LitElement {
         // them flat — the section would render empty and wipe on save.
         title: "Advanced",
         schema: [
+          { name: "repeat_playback", selector: { boolean: {} } },
           {
             name: "snooze_minutes",
             selector: { number: { min: 1, max: 120, mode: "box", unit_of_measurement: "min" } },
@@ -312,8 +314,8 @@ export class WakeyPanel extends LitElement {
       weekdays: "Days",
       date: "Date",
       media_player: "Play on",
-      media: "Browse for a track",
-      source_uri: "Source (URI or search text)",
+      media: "Browse for audio",
+      source_uri: "Source (URL or media ID; search requires Music Assistant)",
       volume: "Volume",
       fade_seconds: "Fade in",
       snooze_minutes: "Snooze length",
@@ -322,6 +324,7 @@ export class WakeyPanel extends LitElement {
       pre_alarm_script: "Pre-alarm script",
       notify_targets: "Notify on ring",
       resume_previous: "Resume previous playback",
+      repeat_playback: "Repeat audio until dismissed",
       advanced: "Advanced",
     })[s.name as string] ?? s.name;
 

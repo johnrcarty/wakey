@@ -35,7 +35,8 @@ Bug reports are very welcome.
   configurable window, instead of being detonated awake at full blast. The ramp
   backs off if you reach for the volume yourself.
 - **A failsafe.** After firing, Wakey checks the speaker actually reached
-  `playing`. If it didn't, it retries, then raises a notification and fires a
+  `playing` — with the alarm, not whatever it was already playing. If it
+  didn't, it retries, then raises a notification and fires a
   `wakey_alarm_failed` event you can hang your own escalation off. An alarm that
   fails silently is worse than no alarm.
 - **Skip next.** Off tomorrow? Skip one occurrence without disarming the alarm
@@ -78,11 +79,39 @@ Not yet in the default HACS index. Add it as a custom repository:
 ## Using it
 
 Add an alarm from the panel: set a time, pick the days, choose a speaker, and
-browse for a track. The media browser opens straight into your Music Assistant
-library.
+browse for audio or enter its URL or media content ID. With Music Assistant,
+you can browse your library using its player entity.
 
-`source_uri` accepts a Music Assistant URI (`library://track/6018`), a media
-content ID, or plain search text that Music Assistant resolves.
+`source_uri` accepts a URL or media content ID supported by the selected
+speaker. When playback goes through Music Assistant, it also accepts Music
+Assistant URIs (`library://track/6018`) and search text that Music Assistant
+resolves.
+
+### Without Music Assistant
+
+Music Assistant is optional. Select your speaker's native Home Assistant
+entity (for example, the WiiM or Cast entity) and enter a playable URL such as
+`http://your-local-server/alarm.mp3`, or choose a supported Home Assistant
+media source. The speaker must be able to reach and play that source.
+
+Wakey automatically uses `media_player.play_media` when Music Assistant is
+absent, the selected entity belongs to another integration, or the source
+starts with `media-source://`. No routing setting needs changing. This avoids
+sending a native speaker to Music Assistant's service, which only controls
+Music Assistant players.
+
+On this path, Wakey sends your source unchanged as `media_content_id` with
+`media_content_type: music`. Wakey does not resolve search text or Music
+Assistant library IDs for native speakers. **Resume previous playback** is
+unavailable on this path.
+
+The playback failsafe also applies to native speakers: it checks for
+`playing`, retries once, then reports failure. If the speaker was already
+playing something when the alarm fired, Wakey compares `media_content_id` and
+only accepts `playing` once it has changed. Players that do not report a
+`media_content_id` fall back to the plain state check.
+
+### Using actions
 
 Everything is also available as actions, which is handy for automations:
 
@@ -150,6 +179,44 @@ One trade-off worth knowing: resuming re-inserts the interrupted track rather
 than rewinding to it, so each ring leaves two spent items behind the play head
 in the Music Assistant queue. They never play again, and anything that starts a
 queue afresh clears them.
+
+### Repeating a short alarm sound
+
+Enable **Repeat audio until dismissed** in Advanced, or set
+`repeat_playback: true`, to keep a single track or spoken message sounding.
+It is off by default and is separate from the alarm's weekday schedule.
+Leave it off for playlists and continuous radio streams.
+
+Wakey uses the speaker's repeat-one mode when supported and its previous mode
+is known. Otherwise it replays a clip only after the speaker reports playback
+ending at its duration. That fallback needs a media ID, duration, and position
+from the speaker; it cannot loop on players that do not report enough detail.
+It does not restart audio on a fixed timer or replay a paused/early-stopped clip.
+
+Snooze, dismiss, auto-dismiss, and unloading Wakey cancel pending repeats and
+restore any repeat mode Wakey changed. The fade and auto-dismiss timer are not
+restarted for each loop. After snooze, a fresh ring gets a fresh auto-dismiss
+window. Use Wakey's snooze/dismiss controls to end the alarm.
+
+## Voice control
+
+With Home Assistant's default Assist conversation agent, say **"snooze"** or
+**"stop the alarm"** in English, or **"schlummern"** or **"Wecker stoppen"**
+in German. These commands act on all Wakey alarms currently ringing.
+
+A bare **"stop"** is left to Home Assistant, which pauses the media in that
+satellite's area. If that pauses a ringing alarm — or someone pauses or turns
+off the speaker any other way — Wakey treats it as a dismiss (reason
+`external`) rather than a playback failure.
+
+Wakey installs English and German sentences in
+`custom_sentences/en/wakey.yaml` and `custom_sentences/de/wakey.yaml` (also
+`de-CH` for German regional pipelines), so either
+Assist language works even when it differs from your Home Assistant language.
+Other languages are not bundled yet. Add your own phrases in a separate YAML
+file under `custom_sentences/<language>/`, using the `WakeySnooze` and
+`WakeyDismiss` intents, then reload Conversation. Wakey manages only its own
+`wakey.yaml` files.
 
 ## Users and permissions
 

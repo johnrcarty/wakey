@@ -311,6 +311,8 @@ async def test_bare_dismiss_only_reaches_your_own_alarms(
     mine = _make_alarm(hass, kid_user.id, name="Mine")
     theirs = _make_alarm(hass, other_user.id, name="Theirs")
 
+    hass.states.async_set(mine.media_player, "playing")
+    hass.states.async_set(theirs.media_player, "playing")
     data = next(iter(hass.data[DOMAIN].values()))
     await data.player.async_fire(mine)
     await data.player.async_fire(theirs)

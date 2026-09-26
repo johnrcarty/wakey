@@ -71,7 +71,9 @@ async def test_delete(hass):
 async def test_reload_from_disk_round_trips(hass):
     store = WakeyStore(hass)
     await store.async_load()
-    alarm = store.async_create({"name": "Weekday", "time": "06:30", "weekdays": [0, 2, 4]})
+    alarm = store.async_create({
+        "name": "Weekday", "time": "06:30", "weekdays": [0, 2, 4], "repeat_playback": True,
+    })
     await store.async_save_now()
 
     reloaded = WakeyStore(hass)
@@ -80,6 +82,11 @@ async def test_reload_from_disk_round_trips(hass):
     assert len(reloaded.async_all()) == 1
     assert reloaded.async_get(alarm.id).name == "Weekday"
     assert reloaded.async_get(alarm.id).weekdays == [0, 2, 4]
+    assert reloaded.async_get(alarm.id).repeat_playback is True
+
+
+def test_older_alarms_do_not_enable_audio_repeat():
+    assert AlarmEntry.from_dict({"id": "old"}).repeat_playback is False
 
 
 # --- coerce ----------------------------------------------------------------

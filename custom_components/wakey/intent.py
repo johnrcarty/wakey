@@ -22,30 +22,10 @@ _LOGGER = logging.getLogger(__name__)
 INTENT_SNOOZE = "WakeySnooze"
 INTENT_DISMISS = "WakeyDismiss"
 
-# HA's default conversation agent only matches sentences from two places: the
-# bundled upstream home-assistant-intents package (an upstream PR, not
-# reachable from here), or <config>/custom_sentences/<language>/*.yaml — a
-# directory in the user's own config, not this integration's folder. So Wakey
-# writes its own file there at setup rather than shipping sentences in-repo.
-_SENTENCES = """\
-# Managed by the Wakey integration — do not edit here.
-# Add your own phrasings in a separate file in this directory; the
-# conversation agent merges every *.yaml file it finds.
-language: "en"
-intents:
-  WakeySnooze:
-    data:
-      - sentences:
-          - "snooze"
-          - "snooze [the] alarm"
-  WakeyDismiss:
-    data:
-      - sentences:
-          - "cancel"
-          - "cancel [the] alarm"
-          - "stop [the] alarm"
-          - "dismiss [the] alarm"
-"""
+# Seed every shipped language: the Assist pipeline language can differ from
+# hass.config.language, and a household can use several pipelines.
+# HA may resolve German regional pipelines to de-CH instead of de.
+_SENTENCE_LANGUAGES = {"en": "en", "de": "de", "de-CH": "de"}
 
 
 def _get_data(hass: HomeAssistant):
@@ -89,16 +69,24 @@ async def async_setup_intents(hass: HomeAssistant) -> None:
     if INTENT_DISMISS not in registered:
         intent.async_register(hass, _WakeyDismissIntent())
 
-    path = Path(hass.config.path("custom_sentences", "en", f"{DOMAIN}.yaml"))
+    def _write_sentences() -> bool:
+        changed = False
+        for language, corpus in _SENTENCE_LANGUAGES.items():
+            source = Path(__file__).parent / "sentences" / f"{corpus}.yaml"
+            path = Path(hass.config.path("custom_sentences", language, f"{DOMAIN}.yaml"))
+            content = source.read_text(encoding="utf-8")
+            content = content.replace(f'language: "{corpus}"', f'language: "{language}"', 1)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            # Only manage our own file. User phrases belong in separate files.
+            if not path.exists() or path.read_text(encoding="utf-8") != content:
+                path.write_text(content, encoding="utf-8")
+                changed = True
+        return changed
 
-    def _write_sentences() -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        # Only touch disk (and the sentence corpus reload it may trigger) if
-        # the content actually changed.
-        if not path.exists() or path.read_text() != _SENTENCES:
-            path.write_text(_SENTENCES)
-
-    await hass.async_add_executor_job(_write_sentences)
+    changed = await hass.async_add_executor_job(_write_sentences)
+    # The conversation agent may already have cached its sentence corpus.
+    if changed and hass.services.has_service("conversation", "reload"):
+        await hass.services.async_call("conversation", "reload", {}, blocking=True)
 
 
 def async_remove_intents(hass: HomeAssistant) -> None:
