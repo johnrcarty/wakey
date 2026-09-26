@@ -78,11 +78,38 @@ Not yet in the default HACS index. Add it as a custom repository:
 ## Using it
 
 Add an alarm from the panel: set a time, pick the days, choose a speaker, and
-browse for a track. The media browser opens straight into your Music Assistant
-library.
+browse for audio or enter its URL or media content ID. With Music Assistant,
+you can browse your library using its player entity.
 
-`source_uri` accepts a Music Assistant URI (`library://track/6018`), a media
-content ID, or plain search text that Music Assistant resolves.
+`source_uri` accepts a URL or media content ID supported by the selected
+speaker. When playback goes through Music Assistant, it also accepts Music
+Assistant URIs (`library://track/6018`) and search text that Music Assistant
+resolves.
+
+### Without Music Assistant
+
+Music Assistant is optional. Select your speaker's native Home Assistant
+entity (for example, the WiiM or Cast entity) and enter a playable URL such as
+`http://your-local-server/alarm.mp3`, or choose a supported Home Assistant
+media source. The speaker must be able to reach and play that source.
+
+Wakey automatically uses `media_player.play_media` when Music Assistant is
+absent, the selected entity belongs to another integration, or the source
+starts with `media-source://`. No routing setting needs changing. This avoids
+sending a native speaker to Music Assistant's service, which only controls
+Music Assistant players.
+
+On this path, Wakey sends your source unchanged as `media_content_id` with
+`media_content_type: music`. Wakey does not resolve search text or Music
+Assistant library IDs for native speakers. **Resume previous playback** is
+unavailable on this path.
+
+The playback failsafe also applies to native speakers: it checks for
+`playing`, retries once, then reports failure. That state check cannot prove
+that the alarm replaced audio that was already playing (tracked in
+[#4](https://github.com/johnrcarty/wakey/issues/4)).
+
+### Using actions
 
 Everything is also available as actions, which is handy for automations:
 

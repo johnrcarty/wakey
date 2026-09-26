@@ -294,8 +294,8 @@ class U {
     for (; (r = x.nextNode()) !== null && n.length < c; ) {
       if (r.nodeType === 1) {
         if (r.hasAttributes()) for (const h of r.getAttributeNames()) if (h.endsWith(le)) {
-          const y = m[o++], v = r.getAttribute(h).split(b), D = /([.?@])?(.*)/.exec(y);
-          n.push({ type: 1, index: a, name: D[2], strings: v, ctor: D[1] === "." ? Pe : D[1] === "?" ? Oe : D[1] === "@" ? je : W }), r.removeAttribute(h);
+          const y = m[o++], v = r.getAttribute(h).split(b), z = /([.?@])?(.*)/.exec(y);
+          n.push({ type: 1, index: a, name: z[2], strings: v, ctor: z[1] === "." ? Pe : z[1] === "?" ? Oe : z[1] === "@" ? je : W }), r.removeAttribute(h);
         } else h.startsWith(b) && (n.push({ type: 6, index: a }), r.removeAttribute(h));
         if (ce.test(r.tagName)) {
           const h = r.textContent.split(b), y = h.length - 1;
@@ -341,7 +341,7 @@ class Ce {
     for (; n !== void 0; ) {
       if (o === n.index) {
         let p;
-        n.type === 2 ? p = new z(a, a.nextSibling, this, e) : n.type === 1 ? p = new n.ctor(a, n.name, n.strings, this, e) : n.type === 6 && (p = new Te(a, this, e)), this._$AV.push(p), n = i[++c];
+        n.type === 2 ? p = new D(a, a.nextSibling, this, e) : n.type === 1 ? p = new n.ctor(a, n.name, n.strings, this, e) : n.type === 6 && (p = new Te(a, this, e)), this._$AV.push(p), n = i[++c];
       }
       o !== n?.index && (a = x.nextNode(), o++);
     }
@@ -352,7 +352,7 @@ class Ce {
     for (const i of this._$AV) i !== void 0 && (i.strings !== void 0 ? (i._$AI(e, i, s), s += i.strings.length - 2) : i._$AI(e[s])), s++;
   }
 }
-class z {
+class D {
   get _$AU() {
     return this._$AM?._$AU ?? this._$Cv;
   }
@@ -398,7 +398,7 @@ class z {
     J(this._$AH) || (this._$AH = [], this._$AR());
     const s = this._$AH;
     let i, r = 0;
-    for (const a of e) r === s.length ? s.push(i = new z(this.O(T()), this.O(T()), this, this.options)) : i = s[r], i._$AI(a), r++;
+    for (const a of e) r === s.length ? s.push(i = new D(this.O(T()), this.O(T()), this, this.options)) : i = s[r], i._$AI(a), r++;
     r < s.length && (this._$AR(i && i._$AB.nextSibling, r), s.length = r);
   }
   _$AR(e = this._$AA.nextSibling, s) {
@@ -477,13 +477,13 @@ class Te {
   }
 }
 const Ne = V.litHtmlPolyfillSupport;
-Ne?.(U, z), (V.litHtmlVersions ??= []).push("3.3.3");
+Ne?.(U, D), (V.litHtmlVersions ??= []).push("3.3.3");
 const Ue = (t, e, s) => {
   const i = s?.renderBefore ?? e;
   let r = i._$litPart$;
   if (r === void 0) {
     const a = s?.renderBefore ?? null;
-    i._$litPart$ = r = new z(e.insertBefore(T(), a), a, void 0, s ?? {});
+    i._$litPart$ = r = new D(e.insertBefore(T(), a), a, void 0, s ?? {});
   }
   return r._$AI(t), r;
 };
@@ -516,8 +516,8 @@ class S extends k {
   }
 }
 S._$litElement$ = !0, S.finalized = !0, Z.litElementHydrateSupport?.({ LitElement: S });
-const ze = Z.litElementPolyfillSupport;
-ze?.({ LitElement: S });
+const De = Z.litElementPolyfillSupport;
+De?.({ LitElement: S });
 (Z.litElementVersions ??= []).push("4.2.2");
 /**
  * @license
@@ -534,7 +534,7 @@ const pe = (t) => (e, s) => {
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const De = { attribute: !0, type: String, converter: H, reflect: !1, hasChanged: F }, Me = (t = De, e, s) => {
+const ze = { attribute: !0, type: String, converter: H, reflect: !1, hasChanged: F }, Me = (t = ze, e, s) => {
   const { kind: i, metadata: r } = s;
   let a = globalThis.litPropertyMetadata.get(r);
   if (a === void 0 && globalThis.litPropertyMetadata.set(r, a = /* @__PURE__ */ new Map()), i === "setter" && ((t = Object.create(t)).wrapped = !0), a.set(s.name, t), i === "accessor") {
@@ -912,8 +912,8 @@ let u = class extends S {
       weekdays: "Days",
       date: "Date",
       media_player: "Play on",
-      media: "Browse for a track",
-      source_uri: "Source (URI or search text)",
+      media: "Browse for audio",
+      source_uri: "Source (URL or media ID; search requires Music Assistant)",
       volume: "Volume",
       fade_seconds: "Fade in",
       snooze_minutes: "Snooze length",

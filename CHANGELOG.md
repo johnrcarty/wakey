@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Documentation
+
+- Explain native-speaker playback without Music Assistant, supported sources,
+  search and resume limitations, and the playback failsafe. Source-field help
+  now makes the Music Assistant requirement for search explicit (#14).
+
 ### Fixed
 
 - Snooze, auto-dismiss, and playback verification timers now run on Home
