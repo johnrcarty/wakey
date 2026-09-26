@@ -178,6 +178,24 @@ than rewinding to it, so each ring leaves two spent items behind the play head
 in the Music Assistant queue. They never play again, and anything that starts a
 queue afresh clears them.
 
+### Repeating a short alarm sound
+
+Enable **Repeat audio until dismissed** in Advanced, or set
+`repeat_playback: true`, to keep a single track or spoken message sounding.
+It is off by default and is separate from the alarm's weekday schedule.
+Leave it off for playlists and continuous radio streams.
+
+Wakey uses the speaker's repeat-one mode when supported and its previous mode
+is known. Otherwise it replays a clip only after the speaker reports playback
+ending at its duration. That fallback needs a media ID, duration, and position
+from the speaker; it cannot loop on players that do not report enough detail.
+It does not restart audio on a fixed timer or replay a paused/early-stopped clip.
+
+Snooze, dismiss, auto-dismiss, and unloading Wakey cancel pending repeats and
+restore any repeat mode Wakey changed. The fade and auto-dismiss timer are not
+restarted for each loop. After snooze, a fresh ring gets a fresh auto-dismiss
+window. Use Wakey's snooze/dismiss controls to end the alarm.
+
 ## Voice control
 
 With Home Assistant's default Assist conversation agent, say **"snooze"** or

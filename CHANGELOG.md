@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- Opt-in **Repeat audio until dismissed** for single alarm tracks (#13).
+  Use native repeat-one when supported, otherwise replay only after a clip's
+  reported duration and position indicate completion. Snooze, dismiss,
+  auto-dismiss, failure, and unload clean up repeat state. The setting defaults
+  to off for existing and new alarms.
+
 ### Documentation
 
 - Explain native-speaker playback without Music Assistant, supported sources,
@@ -10,6 +18,9 @@
 
 ### Fixed
 
+- Short clips observed playing no longer trigger a false playback failure
+  after they end. Replays preserve the fade, resume snapshot, and auto-dismiss
+  deadline; failed playback clears the ringing state and pending work.
 - Voice commands now ship English and German sentences in both language
   directories, including when Assist uses a different language from the
   Home Assistant instance. Reload cached conversation sentences when the

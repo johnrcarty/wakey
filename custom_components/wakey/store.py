@@ -71,6 +71,8 @@ class AlarmEntry:
     # Put back whatever the speaker was playing when this alarm dismisses or
     # snoozes. Music Assistant sources only — see WakeyPlayer._async_capture_resume.
     resume_previous: bool = False
+    # Loop the alarm audio while this occurrence is ringing (not its schedule).
+    repeat_playback: bool = False
     snooze_minutes: int = DEFAULT_SNOOZE_MINUTES
     auto_dismiss_minutes: int = DEFAULT_AUTO_DISMISS_MINUTES
     # Optional hook: run a script this many minutes before the alarm (sunrise

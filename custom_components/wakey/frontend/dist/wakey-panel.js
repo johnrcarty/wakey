@@ -262,8 +262,8 @@ k.elementStyles = [], k.shadowRootOptions = { mode: "open" }, k[j("elementProper
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const V = globalThis, X = (t) => t, R = V.trustedTypes, ee = R ? R.createPolicy("lit-html", { createHTML: (t) => t }) : void 0, le = "$lit$", b = `lit$${Math.random().toFixed(9).slice(2)}$`, de = "?" + b, Ae = `<${de}>`, A = document, T = () => A.createComment(""), N = (t) => t === null || typeof t != "object" && typeof t != "function", J = Array.isArray, ke = (t) => J(t) || typeof t?.[Symbol.iterator] == "function", B = `[ 	
-\f\r]`, O = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, te = /-->/g, se = />/g, w = RegExp(`>|${B}(?:([^\\s"'>=/]+)(${B}*=${B}*(?:[^ 	
+const V = globalThis, X = (t) => t, R = V.trustedTypes, ee = R ? R.createPolicy("lit-html", { createHTML: (t) => t }) : void 0, le = "$lit$", b = `lit$${Math.random().toFixed(9).slice(2)}$`, de = "?" + b, Ae = `<${de}>`, A = document, T = () => A.createComment(""), N = (t) => t === null || typeof t != "object" && typeof t != "function", J = Array.isArray, ke = (t) => J(t) || typeof t?.[Symbol.iterator] == "function", W = `[ 	
+\f\r]`, O = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, te = /-->/g, se = />/g, w = RegExp(`>|${W}(?:([^\\s"'>=/]+)(${W}*=${W}*(?:[^ 	
 \f\r"'\`<>=]|("|')|))|$)`, "g"), ie = /'/g, re = /"/g, ce = /^(?:script|style|textarea|title)$/i, Se = (t) => (e, ...s) => ({ _$litType$: t, strings: e, values: s }), l = Se(1), E = Symbol.for("lit-noChange"), d = Symbol.for("lit-nothing"), ae = /* @__PURE__ */ new WeakMap(), x = A.createTreeWalker(A, 129);
 function he(t, e) {
   if (!J(t) || !t.hasOwnProperty("raw")) throw Error("invalid template strings array");
@@ -295,7 +295,7 @@ class U {
       if (r.nodeType === 1) {
         if (r.hasAttributes()) for (const h of r.getAttributeNames()) if (h.endsWith(le)) {
           const y = m[o++], v = r.getAttribute(h).split(b), z = /([.?@])?(.*)/.exec(y);
-          n.push({ type: 1, index: a, name: z[2], strings: v, ctor: z[1] === "." ? Pe : z[1] === "?" ? Oe : z[1] === "@" ? je : W }), r.removeAttribute(h);
+          n.push({ type: 1, index: a, name: z[2], strings: v, ctor: z[1] === "." ? Pe : z[1] === "?" ? Oe : z[1] === "@" ? je : B }), r.removeAttribute(h);
         } else h.startsWith(b) && (n.push({ type: 6, index: a }), r.removeAttribute(h));
         if (ce.test(r.tagName)) {
           const h = r.textContent.split(b), y = h.length - 1;
@@ -411,7 +411,7 @@ class D {
     this._$AM === void 0 && (this._$Cv = e, this._$AP?.(e));
   }
 }
-class W {
+class B {
   get tagName() {
     return this.element.tagName;
   }
@@ -436,7 +436,7 @@ class W {
     e === d ? this.element.removeAttribute(this.name) : this.element.setAttribute(this.name, e ?? "");
   }
 }
-class Pe extends W {
+class Pe extends B {
   constructor() {
     super(...arguments), this.type = 3;
   }
@@ -444,7 +444,7 @@ class Pe extends W {
     this.element[this.name] = e === d ? void 0 : e;
   }
 }
-class Oe extends W {
+class Oe extends B {
   constructor() {
     super(...arguments), this.type = 4;
   }
@@ -452,7 +452,7 @@ class Oe extends W {
     this.element.toggleAttribute(this.name, !!e && e !== d);
   }
 }
-class je extends W {
+class je extends B {
   constructor(e, s, i, r, a) {
     super(e, s, i, r, a), this.type = 5;
   }
@@ -583,7 +583,8 @@ const ue = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], He = () => ({
   auto_dismiss_minutes: 30,
   enabled: !0,
   notify_targets: [],
-  resume_previous: !1
+  resume_previous: !1,
+  repeat_playback: !1
 });
 async function Re() {
   try {
@@ -595,8 +596,8 @@ async function Re() {
     new Promise((t) => setTimeout(() => t(!1), 4e3))
   ]);
 }
-var Le = Object.defineProperty, We = Object.getOwnPropertyDescriptor, $ = (t, e, s, i) => {
-  for (var r = i > 1 ? void 0 : i ? We(e, s) : e, a = t.length - 1, o; a >= 0; a--)
+var Le = Object.defineProperty, Be = Object.getOwnPropertyDescriptor, $ = (t, e, s, i) => {
+  for (var r = i > 1 ? void 0 : i ? Be(e, s) : e, a = t.length - 1, o; a >= 0; a--)
     (o = t[a]) && (r = (i ? o(e, s, r) : o(r)) || r);
   return i && r && Le(e, s, r), r;
 };
@@ -897,10 +898,10 @@ $([
 g = $([
   pe("wakey-admin")
 ], g);
-var Be = Object.defineProperty, Ie = Object.getOwnPropertyDescriptor, f = (t, e, s, i) => {
+var We = Object.defineProperty, Ie = Object.getOwnPropertyDescriptor, f = (t, e, s, i) => {
   for (var r = i > 1 ? void 0 : i ? Ie(e, s) : e, a = t.length - 1, o; a >= 0; a--)
     (o = t[a]) && (r = (i ? o(e, s, r) : o(r)) || r);
-  return i && r && Be(e, s, r), r;
+  return i && r && We(e, s, r), r;
 };
 const qe = ue.map((t, e) => ({ value: String(e), label: t }));
 let u = class extends S {
@@ -922,6 +923,7 @@ let u = class extends S {
       pre_alarm_script: "Pre-alarm script",
       notify_targets: "Notify on ring",
       resume_previous: "Resume previous playback",
+      repeat_playback: "Repeat audio until dismissed",
       advanced: "Advanced"
     })[t.name] ?? t.name;
   }
@@ -1034,6 +1036,7 @@ let u = class extends S {
       volume: Number(t.volume ?? 0.7),
       fade_seconds: Number(t.fade_seconds ?? 0),
       resume_previous: !!(t.resume_previous ?? !1),
+      repeat_playback: !!(t.repeat_playback ?? !1),
       snooze_minutes: Number(t.snooze_minutes ?? 9),
       auto_dismiss_minutes: Number(t.auto_dismiss_minutes ?? 30),
       pre_alarm_minutes: Number(t.pre_alarm_minutes ?? 0),
@@ -1093,6 +1096,7 @@ let u = class extends S {
         // them flat — the section would render empty and wipe on save.
         title: "Advanced",
         schema: [
+          { name: "repeat_playback", selector: { boolean: {} } },
           {
             name: "snooze_minutes",
             selector: { number: { min: 1, max: 120, mode: "box", unit_of_measurement: "min" } }

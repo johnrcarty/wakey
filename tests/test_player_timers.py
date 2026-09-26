@@ -17,7 +17,7 @@ PLAYER = "media_player.bedroom"
 
 
 @pytest.fixture
-def playback(hass):
+async def playback(hass):
     store = WakeyStore(hass)
     player = WakeyPlayer(hass, store)
     calls = {name: async_mock_service(hass, "media_player", name) for name in (
@@ -29,7 +29,7 @@ def playback(hass):
         "snooze_minutes": 9, "auto_dismiss_minutes": 30,
     })
     yield player, alarm, calls
-    player.async_shutdown()
+    await player.async_shutdown()
 
 
 async def advance(hass, freezer, seconds):
@@ -103,7 +103,7 @@ async def test_shutdown_cancels_pending_snooze(hass, freezer, playback):
     player, alarm, calls = playback
     await player.async_fire(alarm)
     await player.async_snooze(alarm.id)
-    player.async_shutdown()
+    await player.async_shutdown()
     await advance(hass, freezer, 10 * 60)
     assert len(calls["play_media"]) == 1
 
@@ -115,6 +115,6 @@ async def test_retrigger_cancels_previous_auto_dismiss(hass, freezer, playback):
     await player.async_fire(alarm)
     await advance(hass, freezer, 11 * 60)
     assert alarm.id in player.ringing
-    assert not calls["media_pause"]
+    assert len(calls["media_pause"]) == 1  # Stops the ring being replaced.
     await advance(hass, freezer, 20 * 60)
     assert alarm.id not in player.ringing

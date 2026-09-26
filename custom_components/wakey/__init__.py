@@ -72,6 +72,7 @@ _ALARM_FIELDS = {
     vol.Optional("volume"): vol.All(vol.Coerce(float), vol.Range(0.0, 1.0)),
     vol.Optional("fade_seconds"): vol.All(vol.Coerce(int), vol.Range(0, 3600)),
     vol.Optional("resume_previous"): cv.boolean,
+    vol.Optional("repeat_playback"): cv.boolean,
     vol.Optional("snooze_minutes"): vol.All(vol.Coerce(int), vol.Range(1, 120)),
     vol.Optional("auto_dismiss_minutes"): vol.All(vol.Coerce(int), vol.Range(1, 240)),
     vol.Optional("pre_alarm_minutes"): vol.All(vol.Coerce(int), vol.Range(0, 240)),
@@ -173,7 +174,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     data: WakeyData = hass.data[DOMAIN].pop(entry.entry_id)
     data.scheduler.async_stop()
-    data.player.async_shutdown()
+    await data.player.async_shutdown()
     await data.store.async_save_now()
     async_unregister_panel(hass)
     async_remove_intents(hass)

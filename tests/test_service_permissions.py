@@ -128,6 +128,7 @@ async def test_services_refuse_another_users_alarm(
 
 async def test_trigger_now_still_works_for_an_automation(hass, entry, other_user) -> None:
     alarm = _store(hass).async_create({**ALARM, "owner_id": other_user.id})
+    hass.states.async_set(alarm.media_player, "playing")
 
     await hass.services.async_call(
         DOMAIN, "trigger_now", {"alarm_id": alarm.id}, blocking=True

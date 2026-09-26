@@ -18,6 +18,7 @@ export interface Alarm {
   fade_seconds: number;
   /** Restore what the speaker was playing when the alarm ends. MA sources only. */
   resume_previous: boolean;
+  repeat_playback: boolean;
   snooze_minutes: number;
   auto_dismiss_minutes: number;
   pre_alarm_minutes: number;
@@ -92,6 +93,7 @@ export const emptyDraft = (): Partial<Alarm> => ({
   enabled: true,
   notify_targets: [],
   resume_previous: false,
+  repeat_playback: false,
 });
 
 /**

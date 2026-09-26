@@ -9,14 +9,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import uuid
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
-from datetime import timedelta
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timedelta
 from functools import partial
 
+from homeassistant.components.media_player import MediaPlayerEntityFeature
 from homeassistant.const import (
     ATTR_ENTITY_ID,
+    STATE_IDLE,
     STATE_OFF,
     STATE_PLAYING,
     STATE_UNAVAILABLE,
@@ -25,7 +28,11 @@ from homeassistant.const import (
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_call_later, async_track_time_interval
+from homeassistant.helpers.event import (
+    async_call_later,
+    async_track_state_change_event,
+    async_track_time_interval,
+)
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -67,10 +74,22 @@ class RingState:
     """Runtime state for an alarm that is currently ringing or snoozed."""
 
     alarm_id: str
+    alarm: AlarmEntry
     snoozed: bool = False
     attempts: int = 0
     unsubs: list[CALLBACK_TYPE] = field(default_factory=list)
     timer_generation: int = 0
+    playback_generation: int = 0
+    playback_seen: bool = False
+    play_requested: bool = False
+    media_id: str | None = None
+    native_repeat: bool = False
+    repeat_attempted: bool = False
+    previous_repeat: str | None = None
+    replay_pending: bool = False
+    fade_unsub: CALLBACK_TYPE | None = None
+    # Finish an in-flight play call before silencing/restoring the speaker.
+    playback_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     # What to put back when this ring ends. None means "nothing to restore" —
     # either the alarm has resume_previous off, or nothing was playing.
     resume: ResumeState | None = None
@@ -112,6 +131,8 @@ class WakeyPlayer:
         generation = state.timer_generation
 
         async def _run(_now) -> None:
+            if unsub in state.unsubs:
+                state.unsubs.remove(unsub)
             # Cancellation can happen after HA has already queued the callback.
             if (
                 self.ringing.get(state.alarm_id) is state
@@ -119,7 +140,17 @@ class WakeyPlayer:
             ):
                 await action()
 
-        state.unsubs.append(async_call_later(self.hass, delay, _run))
+        unsub = async_call_later(self.hass, delay, _run)
+        state.unsubs.append(unsub)
+
+    def _active(self, state: RingState) -> bool:
+        return self.ringing.get(state.alarm_id) is state and not state.snoozed
+
+    def _schedule_verify(self, state: RingState) -> None:
+        self._schedule(
+            state, PLAYBACK_VERIFY_SECONDS,
+            partial(self._async_verify, state.alarm_id, state.playback_generation),
+        )
 
     # --- firing ------------------------------------------------------------
 
@@ -131,11 +162,15 @@ class WakeyPlayer:
             return
 
         # Restarting a ringing alarm cleanly replaces the old one.
-        if (existing := self.ringing.pop(alarm.id, None)) is not None:
-            existing.cancel()
+        if alarm.id in self.ringing:
+            await self.async_dismiss(alarm.id, reason="replaced")
 
-        state = RingState(alarm_id=alarm.id)
+        # Edits apply to the next ring. Cleanup must target the speaker and
+        # settings that this occurrence actually started with.
+        alarm = replace(alarm)
+        state = RingState(alarm_id=alarm.id, alarm=alarm)
         self.ringing[alarm.id] = state
+        self._watch_playback(state)
 
         self.store.async_update(alarm.id, {"last_fired": dt_util.utcnow().isoformat()})
         self.hass.bus.async_fire(
@@ -143,20 +178,18 @@ class WakeyPlayer:
             {ATTR_ALARM_ID: alarm.id, "name": alarm.name, "missed": was_missed},
         )
 
-        await self._async_start_playback(alarm, state)
-        await self._async_send_ring_notification(alarm, state)
-
-        # Failsafe: come back and check it actually started.
-        self._schedule(
-            state, PLAYBACK_VERIFY_SECONDS, partial(self._async_verify, alarm.id)
-        )
-
+        # Notifications and slow service calls must not extend the ring window.
         if alarm.auto_dismiss_minutes:
             self._schedule(
                 state, alarm.auto_dismiss_minutes * 60,
                 partial(self.async_dismiss, alarm.id, reason="auto"),
             )
 
+        await self._async_start_playback(alarm, state)
+        if not self._active(state):
+            return
+        self._schedule_verify(state)
+        await self._async_send_ring_notification(alarm, state)
         async_dispatcher_send(self.hass, SIGNAL_RUNTIME_CHANGED)
 
     async def async_run_pre_alarm(self, alarm: AlarmEntry) -> None:
@@ -220,6 +253,11 @@ class WakeyPlayer:
             )
 
     async def _async_start_playback(self, alarm: AlarmEntry, state: RingState) -> None:
+        async with state.playback_lock:
+            if self._active(state):
+                await self._async_start_locked(alarm, state)
+
+    async def _async_start_locked(self, alarm: AlarmEntry, state: RingState) -> None:
         state.attempts += 1
         player = alarm.media_player
 
@@ -243,6 +281,27 @@ class WakeyPlayer:
             "volume_set",
             {ATTR_ENTITY_ID: player, "volume_level": start_volume},
         )
+
+        if not self._active(state):
+            return
+        await self._async_play_source(alarm, state)
+
+        if self._active(state) and alarm.fade_seconds > 0:
+            self._start_fade(alarm, state, start_volume)
+
+    async def _async_play_source(self, alarm: AlarmEntry, state: RingState) -> None:
+        """Play without restarting the fade, ring deadline, or resume capture."""
+        player = alarm.media_player
+        state.playback_generation += 1
+        state.playback_seen = False
+        state.play_requested = True
+        state.media_id = None
+        current = self.hass.states.get(player)
+        if alarm.repeat_playback and state.previous_repeat is None and current:
+            previous = current.attributes.get("repeat")
+            features = current.attributes.get("supported_features", 0)
+            if features & MediaPlayerEntityFeature.REPEAT_SET and previous in ("off", "one", "all"):
+                state.previous_repeat = previous
 
         if self._use_music_assistant(alarm):
             # media_type is deliberately omitted: the stored value may be a
@@ -271,8 +330,98 @@ class WakeyPlayer:
                 },
             )
 
-        if alarm.fade_seconds > 0:
-            self._start_fade(alarm, state, start_volume)
+        if (
+            self._active(state) and state.previous_repeat is not None
+            and (state.native_repeat or not state.repeat_attempted)
+        ):
+            state.repeat_attempted = True
+            state.native_repeat = await self._call(
+                "media_player", "repeat_set", {ATTR_ENTITY_ID: player, "repeat": "one"}
+            )
+
+    def _watch_playback(self, state: RingState) -> None:
+        """Remember short playback and repeat only an observed completed item."""
+
+        @callback
+        def _changed(event) -> None:
+            if not self._active(state) or not state.play_requested:
+                return
+            old = event.data.get("old_state")
+            new = event.data.get("new_state")
+            if new is None:
+                return
+            if new.state == STATE_PLAYING:
+                state.playback_seen = True
+                if state.media_id is None:
+                    state.media_id = new.attributes.get("media_content_id")
+                return
+            if (
+                not state.alarm.repeat_playback
+                or state.native_repeat
+                or state.replay_pending
+                or not state.playback_seen
+                or old is None
+                or old.state != STATE_PLAYING
+                or new.state != STATE_IDLE
+                or not state.media_id
+                or old.attributes.get("media_content_id") != state.media_id
+                or new.attributes.get("media_content_id") not in (None, state.media_id)
+                or not self._completed(old)
+            ):
+                return
+            # A short delay allows an explicit stop/track change to settle.
+            state.replay_pending = True
+            self._schedule(state, 0.5, partial(self._async_replay, state))
+
+        state.unsubs.append(async_track_state_change_event(
+            self.hass, [state.alarm.media_player], _changed
+        ))
+
+    @staticmethod
+    def _completed(current) -> bool:
+        """An idle transition alone may be a manual stop, not end of media."""
+        try:
+            duration = float(current.attributes.get("media_duration", 0))
+            position = float(current.attributes["media_position"])
+            updated = current.attributes.get("media_position_updated_at")
+            if isinstance(updated, str):
+                updated = dt_util.parse_datetime(updated)
+            if isinstance(updated, datetime) and updated.tzinfo is not None:
+                position += max(0, (dt_util.utcnow() - updated).total_seconds())
+            return (
+                math.isfinite(duration) and math.isfinite(position) and duration > 0
+                and position >= duration - min(0.5, duration * 0.05)
+            )
+        except (KeyError, TypeError, ValueError):
+            return False
+
+    async def _async_replay(self, state: RingState) -> None:
+        async with state.playback_lock:
+            state.replay_pending = False
+            current = self.hass.states.get(state.alarm.media_player)
+            if not self._active(state) or current is None or current.state != STATE_IDLE:
+                return
+            if current.attributes.get("media_content_id") not in (None, state.media_id):
+                return
+            state.attempts = 1
+            await self._async_play_source(state.alarm, state)
+            if self._active(state):
+                self._schedule_verify(state)
+
+    async def _restore_repeat(self, alarm: AlarmEntry, state: RingState) -> None:
+        previous = state.previous_repeat
+        state.previous_repeat = None
+        state.native_repeat = False
+        if previous is None:
+            return
+        current = self.hass.states.get(alarm.media_player)
+        # Respect a user's explicit repeat-mode change during the ring.
+        if current is not None and current.attributes.get("repeat") not in (None, "one"):
+            return
+        await self._call(
+            "media_player", "repeat_set",
+            {ATTR_ENTITY_ID: alarm.media_player, "repeat": previous},
+        )
 
     @callback
     def _use_music_assistant(self, alarm: AlarmEntry) -> bool:
@@ -397,33 +546,49 @@ class WakeyPlayer:
 
     @callback
     def _start_fade(self, alarm: AlarmEntry, state: RingState, start: float) -> None:
+        if state.fade_unsub is not None:
+            state.fade_unsub()
+            if state.fade_unsub in state.unsubs:
+                state.unsubs.remove(state.fade_unsub)
         steps = max(1, alarm.fade_seconds // FADE_STEP_SECONDS)
         increment = (alarm.volume - start) / steps
         progress = {"level": start, "done": 0}
 
         async def _step(_now) -> None:
-            progress["done"] += 1
-            progress["level"] = min(alarm.volume, progress["level"] + increment)
-            await self._call(
-                "media_player",
-                "volume_set",
-                {ATTR_ENTITY_ID: alarm.media_player, "volume_level": round(progress["level"], 3)},
-            )
-            if progress["done"] >= steps:
-                unsub()
+            async with state.playback_lock:
+                if not self._active(state) or state.fade_unsub is not unsub:
+                    return
+                progress["done"] += 1
+                progress["level"] = min(alarm.volume, progress["level"] + increment)
+                await self._call(
+                    "media_player",
+                    "volume_set",
+                    {ATTR_ENTITY_ID: alarm.media_player, "volume_level": round(progress["level"], 3)},
+                )
+                if progress["done"] >= steps:
+                    unsub()
+                    state.fade_unsub = None
+                    if unsub in state.unsubs:
+                        state.unsubs.remove(unsub)
 
         unsub = async_track_time_interval(
             self.hass, _step, timedelta(seconds=FADE_STEP_SECONDS)
         )
         state.unsubs.append(unsub)
+        state.fade_unsub = unsub
 
     # --- failsafe ----------------------------------------------------------
 
-    async def _async_verify(self, alarm_id: str) -> None:
+    async def _async_verify(self, alarm_id: str, generation: int | None = None) -> None:
         """Did playback actually start? If not, retry, then fall back."""
         state = self.ringing.get(alarm_id)
-        alarm = self.store.async_get(alarm_id)
-        if state is None or alarm is None or state.snoozed:
+        if state is None or state.snoozed:
+            return
+        alarm = state.alarm
+        if generation is not None and generation != state.playback_generation:
+            return
+        # A short clip may have ended before the ten-second verification.
+        if state.playback_seen:
             return
 
         current = self.hass.states.get(alarm.media_player)
@@ -437,9 +602,8 @@ class WakeyPlayer:
                 "%s did not start playing (state=%s) — retrying once", alarm.media_player, observed
             )
             await self._async_start_playback(alarm, state)
-            self._schedule(
-                state, PLAYBACK_VERIFY_SECONDS, partial(self._async_verify, alarm_id)
-            )
+            if self._active(state):
+                self._schedule_verify(state)
             return
 
         _LOGGER.error(
@@ -454,6 +618,10 @@ class WakeyPlayer:
     @callback
     def _fail(self, alarm: AlarmEntry, reason: str) -> None:
         """Last resort. Make the failure impossible to miss."""
+        if (state := self.ringing.pop(alarm.id, None)) is not None:
+            state.cancel()
+            self.hass.async_create_task(self._finish_playback(state))
+            async_dispatcher_send(self.hass, SIGNAL_RUNTIME_CHANGED)
         self.hass.bus.async_fire(
             EVENT_ALARM_FAILED,
             {ATTR_ALARM_ID: alarm.id, "name": alarm.name, "reason": reason},
@@ -476,17 +644,19 @@ class WakeyPlayer:
     # --- snooze / dismiss --------------------------------------------------
 
     async def async_snooze(self, alarm_id: str, minutes: int | None = None) -> bool:
-        alarm = self.store.async_get(alarm_id)
         state = self.ringing.get(alarm_id)
-        if alarm is None or state is None:
+        if state is None or state.snoozed:
             return False
+        alarm = state.alarm
 
         state.cancel()
         state.snoozed = True
         state.attempts = 0
         # Resuming for the duration of the snooze is the point: the ambient
         # audio comes back, and the next ring captures it again from scratch.
-        await self._stop_playback(alarm, state)
+        await self._finish_playback(state)
+        if self.ringing.get(alarm_id) is not state:
+            return False
 
         delay = (minutes if minutes is not None else alarm.snooze_minutes) * 60
         self._schedule(
@@ -512,13 +682,19 @@ class WakeyPlayer:
             return False
         state.cancel()
 
-        if (alarm := self.store.async_get(alarm_id)) is not None:
-            await self._stop_playback(alarm, state)
-            self.hass.bus.async_fire(
-                EVENT_ALARM_DISMISSED,
-                {ATTR_ALARM_ID: alarm_id, "name": alarm.name, "reason": reason},
-            )
-            _LOGGER.info("Dismissed %s (%s)", alarm.name, reason)
+        alarm = state.alarm
+        # Snoozing already restored/paused the speaker. Dismissing during
+        # snooze must leave the resumed ambient audio alone.
+        if not state.snoozed:
+            await self._finish_playback(state)
+        else:
+            async with state.playback_lock:
+                pass  # Wait for in-flight snooze cleanup before replacing this ring.
+        self.hass.bus.async_fire(
+            EVENT_ALARM_DISMISSED,
+            {ATTR_ALARM_ID: alarm_id, "name": alarm.name, "reason": reason},
+        )
+        _LOGGER.info("Dismissed %s (%s)", alarm.name, reason)
 
         async_dispatcher_send(self.hass, SIGNAL_RUNTIME_CHANGED)
         return True
@@ -530,6 +706,11 @@ class WakeyPlayer:
     async def async_snooze_all(self) -> None:
         for alarm_id in list(self.ringing):
             await self.async_snooze(alarm_id)
+
+    async def _finish_playback(self, state: RingState) -> None:
+        async with state.playback_lock:
+            await self._restore_repeat(state.alarm, state)
+            await self._stop_playback(state.alarm, state)
 
     async def _stop_playback(self, alarm: AlarmEntry, state: RingState | None = None) -> None:
         """Silence the alarm, by restoring what it interrupted where possible.
@@ -543,7 +724,13 @@ class WakeyPlayer:
         current = self.hass.states.get(alarm.media_player)
         if current is None or current.state in (STATE_OFF, STATE_UNAVAILABLE):
             return
-        await self._call("media_player", "media_pause", {ATTR_ENTITY_ID: alarm.media_player})
+        features = current.attributes.get("supported_features", 0)
+        service = "media_pause"
+        if features & MediaPlayerEntityFeature.STOP and not features & MediaPlayerEntityFeature.PAUSE:
+            service = "media_stop"
+        if not await self._call("media_player", service, {ATTR_ENTITY_ID: alarm.media_player}):
+            if service == "media_pause" and features & MediaPlayerEntityFeature.STOP:
+                await self._call("media_player", "media_stop", {ATTR_ENTITY_ID: alarm.media_player})
 
     # --- helpers -----------------------------------------------------------
 
@@ -602,8 +789,6 @@ class WakeyPlayer:
             _LOGGER.warning("%s.%s failed (%s): %s", domain, service, data.get(ATTR_ENTITY_ID), err)
         return None
 
-    @callback
-    def async_shutdown(self) -> None:
-        for state in self.ringing.values():
-            state.cancel()
-        self.ringing.clear()
+    async def async_shutdown(self) -> None:
+        for alarm_id in list(self.ringing):
+            await self.async_dismiss(alarm_id, reason="unload")
