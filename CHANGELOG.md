@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Snooze, auto-dismiss, and playback verification timers now run on Home
+  Assistant's event loop. Their previous callbacks ran in worker threads and
+  were rejected by Home Assistant's thread-safety checks (#11). Cancelled
+  callbacks cannot affect a later ring of the same alarm.
+
 ## 0.5.1
 
 ### Fixed

@@ -10,8 +10,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
+from functools import partial
 
 from homeassistant.const import (
     ATTR_ENTITY_ID,
@@ -68,6 +70,7 @@ class RingState:
     snoozed: bool = False
     attempts: int = 0
     unsubs: list[CALLBACK_TYPE] = field(default_factory=list)
+    timer_generation: int = 0
     # What to put back when this ring ends. None means "nothing to restore" —
     # either the alarm has resume_previous off, or nothing was playing.
     resume: ResumeState | None = None
@@ -83,6 +86,7 @@ class RingState:
     token: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def cancel(self) -> None:
+        self.timer_generation += 1
         for unsub in self.unsubs:
             unsub()
         self.unsubs.clear()
@@ -99,6 +103,23 @@ class WakeyPlayer:
     @property
     def any_ringing(self) -> bool:
         return any(not state.snoozed for state in self.ringing.values())
+
+    @callback
+    def _schedule(
+        self, state: RingState, delay: float, action: Callable[[], Awaitable[object]]
+    ) -> None:
+        """Run timers on HA's event loop, only for the ring that scheduled them."""
+        generation = state.timer_generation
+
+        async def _run(_now) -> None:
+            # Cancellation can happen after HA has already queued the callback.
+            if (
+                self.ringing.get(state.alarm_id) is state
+                and state.timer_generation == generation
+            ):
+                await action()
+
+        state.unsubs.append(async_call_later(self.hass, delay, _run))
 
     # --- firing ------------------------------------------------------------
 
@@ -126,23 +147,14 @@ class WakeyPlayer:
         await self._async_send_ring_notification(alarm, state)
 
         # Failsafe: come back and check it actually started.
-        state.unsubs.append(
-            async_call_later(
-                self.hass,
-                PLAYBACK_VERIFY_SECONDS,
-                lambda _now: self.hass.async_create_task(self._async_verify(alarm.id)),
-            )
+        self._schedule(
+            state, PLAYBACK_VERIFY_SECONDS, partial(self._async_verify, alarm.id)
         )
 
         if alarm.auto_dismiss_minutes:
-            state.unsubs.append(
-                async_call_later(
-                    self.hass,
-                    alarm.auto_dismiss_minutes * 60,
-                    lambda _now: self.hass.async_create_task(
-                        self.async_dismiss(alarm.id, reason="auto")
-                    ),
-                )
+            self._schedule(
+                state, alarm.auto_dismiss_minutes * 60,
+                partial(self.async_dismiss, alarm.id, reason="auto"),
             )
 
         async_dispatcher_send(self.hass, SIGNAL_RUNTIME_CHANGED)
@@ -425,12 +437,8 @@ class WakeyPlayer:
                 "%s did not start playing (state=%s) — retrying once", alarm.media_player, observed
             )
             await self._async_start_playback(alarm, state)
-            state.unsubs.append(
-                async_call_later(
-                    self.hass,
-                    PLAYBACK_VERIFY_SECONDS,
-                    lambda _now: self.hass.async_create_task(self._async_verify(alarm_id)),
-                )
+            self._schedule(
+                state, PLAYBACK_VERIFY_SECONDS, partial(self._async_verify, alarm_id)
             )
             return
 
@@ -481,12 +489,8 @@ class WakeyPlayer:
         await self._stop_playback(alarm, state)
 
         delay = (minutes if minutes is not None else alarm.snooze_minutes) * 60
-        state.unsubs.append(
-            async_call_later(
-                self.hass,
-                delay,
-                lambda _now: self.hass.async_create_task(self._async_wake_from_snooze(alarm_id)),
-            )
+        self._schedule(
+            state, delay, partial(self._async_wake_from_snooze, alarm_id)
         )
         self.hass.bus.async_fire(
             EVENT_ALARM_SNOOZED,
