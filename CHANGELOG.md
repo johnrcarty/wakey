@@ -10,6 +10,10 @@
 
 ### Fixed
 
+- Voice commands now ship English and German sentences in both language
+  directories, including when Assist uses a different language from the
+  Home Assistant instance. Reload cached conversation sentences when the
+  managed files change (#12).
 - Snooze, auto-dismiss, and playback verification timers now run on Home
   Assistant's event loop. Their previous callbacks ran in worker threads and
   were rejected by Home Assistant's thread-safety checks (#11). Cancelled

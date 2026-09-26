@@ -1,3 +1,6 @@
 pytest-homeassistant-custom-component==0.13.354
 # panel_custom pulls in the frontend component, which imports hass_frontend.
 home-assistant-frontend==20260729.5
+# Exercise custom sentences through Home Assistant's real conversation agent.
+hassil==3.11.0
+home-assistant-intents==2026.7.30

@@ -178,6 +178,21 @@ than rewinding to it, so each ring leaves two spent items behind the play head
 in the Music Assistant queue. They never play again, and anything that starts a
 queue afresh clears them.
 
+## Voice control
+
+With Home Assistant's default Assist conversation agent, say **"snooze"** or
+**"stop the alarm"** in English, or **"schlummern"** or **"Wecker stoppen"**
+in German. These commands act on all Wakey alarms currently ringing.
+
+Wakey installs English and German sentences in
+`custom_sentences/en/wakey.yaml` and `custom_sentences/de/wakey.yaml` (also
+`de-CH` for German regional pipelines), so either
+Assist language works even when it differs from your Home Assistant language.
+Other languages are not bundled yet. Add your own phrases in a separate YAML
+file under `custom_sentences/<language>/`, using the `WakeySnooze` and
+`WakeyDismiss` intents, then reload Conversation. Wakey manages only its own
+`wakey.yaml` files.
+
 ## Users and permissions
 
 Every alarm belongs to the Home Assistant user who created it. You see your own
