@@ -21,6 +21,7 @@ from homeassistant.const import (
     ATTR_ENTITY_ID,
     STATE_IDLE,
     STATE_OFF,
+    STATE_PAUSED,
     STATE_PLAYING,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
@@ -43,6 +44,7 @@ from .const import (
     EVENT_ALARM_FIRED,
     EVENT_ALARM_SNOOZED,
     EVENT_PRE_ALARM,
+    EXTERNAL_STOP_SETTLE_SECONDS,
     FADE_FLOOR,
     FADE_STEP_SECONDS,
     PLAYBACK_VERIFY_SECONDS,
@@ -83,6 +85,10 @@ class RingState:
     playback_seen: bool = False
     play_requested: bool = False
     media_id: str | None = None
+    # What the target was already playing when this ring started. Until the
+    # player reports different media, "playing" is that stream, not the alarm.
+    preexisting_media: str | None = None
+    preexisting_checked: bool = False
     native_repeat: bool = False
     repeat_attempted: bool = False
     previous_repeat: str | None = None
@@ -269,6 +275,11 @@ class WakeyPlayer:
         if current.state == STATE_UNAVAILABLE:
             _LOGGER.warning("%s is unavailable — trying anyway", player)
 
+        if not state.preexisting_checked:
+            state.preexisting_checked = True
+            if current.state == STATE_PLAYING:
+                state.preexisting_media = current.attributes.get("media_content_id")
+
         if not state.resume_checked:
             await self._async_capture_resume(alarm, state)
 
@@ -351,9 +362,24 @@ class WakeyPlayer:
             if new is None:
                 return
             if new.state == STATE_PLAYING:
-                state.playback_seen = True
-                if state.media_id is None:
-                    state.media_id = new.attributes.get("media_content_id")
+                if self._playing_alarm(state, new):
+                    state.playback_seen = True
+                    if state.media_id is None:
+                        state.media_id = new.attributes.get("media_content_id")
+                return
+            if (
+                new.state in (STATE_PAUSED, STATE_OFF)
+                and state.playback_seen
+                and old is not None
+                and old.state == STATE_PLAYING
+                and old.attributes.get("media_content_id") in (None, state.media_id)
+            ):
+                # Wakey only pauses a ring it has already stopped tracking, so
+                # this is someone else silencing the alarm (issue #3).
+                self._schedule(
+                    state, EXTERNAL_STOP_SETTLE_SECONDS,
+                    partial(self._async_check_external_stop, state),
+                )
                 return
             if (
                 not state.alarm.repeat_playback
@@ -376,6 +402,33 @@ class WakeyPlayer:
         state.unsubs.append(async_track_state_change_event(
             self.hass, [state.alarm.media_player], _changed
         ))
+
+    @staticmethod
+    def _playing_alarm(state: RingState, current) -> bool:
+        """Whether the player is playing the alarm, not what it interrupted.
+
+        A player that was already playing stays "playing" if play_media is
+        silently ignored, so state alone cannot prove the alarm sounded (issue
+        #4). Without a media id to compare, fall back to trusting the state.
+        """
+        if current is None or current.state != STATE_PLAYING:
+            return False
+        if state.preexisting_media is None:
+            return True
+        media = current.attributes.get("media_content_id")
+        return media != state.preexisting_media or media == state.alarm.source_uri
+
+    async def _async_check_external_stop(self, state: RingState) -> None:
+        current = self.hass.states.get(state.alarm.media_player)
+        if not self._active(state) or current is None:
+            return
+        if current.state not in (STATE_PAUSED, STATE_OFF):
+            return
+        _LOGGER.info(
+            "%s was silenced outside Wakey — treating %s as dismissed",
+            state.alarm.media_player, state.alarm.name,
+        )
+        await self.async_dismiss(state.alarm_id, reason="external")
 
     @staticmethod
     def _completed(current) -> bool:
@@ -592,10 +645,12 @@ class WakeyPlayer:
             return
 
         current = self.hass.states.get(alarm.media_player)
-        if current is not None and current.state == STATE_PLAYING:
+        if self._playing_alarm(state, current):
             return
 
         observed = current.state if current else "missing"
+        if observed == STATE_PLAYING:
+            observed = "previous_media"
 
         if state.attempts < 2:
             _LOGGER.warning(

@@ -18,6 +18,12 @@
 
 ### Fixed
 
+- Pausing or turning off a ringing alarm outside Wakey, including a bare
+  "stop" to Assist, now dismisses it (reason `external`) instead of restarting
+  playback and then reporting a false failure (#3).
+- The playback failsafe is no longer satisfied by audio that was already
+  playing on the speaker. When the player reports `media_content_id`, the
+  alarm must replace it; otherwise the old state check applies (#4).
 - Short clips observed playing no longer trigger a false playback failure
   after they end. Replays preserve the fade, resume snapshot, and auto-dismiss
   deadline; failed playback clears the ringing state and pending work.

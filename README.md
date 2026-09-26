@@ -35,7 +35,8 @@ Bug reports are very welcome.
   configurable window, instead of being detonated awake at full blast. The ramp
   backs off if you reach for the volume yourself.
 - **A failsafe.** After firing, Wakey checks the speaker actually reached
-  `playing`. If it didn't, it retries, then raises a notification and fires a
+  `playing` — with the alarm, not whatever it was already playing. If it
+  didn't, it retries, then raises a notification and fires a
   `wakey_alarm_failed` event you can hang your own escalation off. An alarm that
   fails silently is worse than no alarm.
 - **Skip next.** Off tomorrow? Skip one occurrence without disarming the alarm
@@ -105,9 +106,10 @@ Assistant library IDs for native speakers. **Resume previous playback** is
 unavailable on this path.
 
 The playback failsafe also applies to native speakers: it checks for
-`playing`, retries once, then reports failure. That state check cannot prove
-that the alarm replaced audio that was already playing (tracked in
-[#4](https://github.com/johnrcarty/wakey/issues/4)).
+`playing`, retries once, then reports failure. If the speaker was already
+playing something when the alarm fired, Wakey compares `media_content_id` and
+only accepts `playing` once it has changed. Players that do not report a
+`media_content_id` fall back to the plain state check.
 
 ### Using actions
 
@@ -201,6 +203,11 @@ window. Use Wakey's snooze/dismiss controls to end the alarm.
 With Home Assistant's default Assist conversation agent, say **"snooze"** or
 **"stop the alarm"** in English, or **"schlummern"** or **"Wecker stoppen"**
 in German. These commands act on all Wakey alarms currently ringing.
+
+A bare **"stop"** is left to Home Assistant, which pauses the media in that
+satellite's area. If that pauses a ringing alarm — or someone pauses or turns
+off the speaker any other way — Wakey treats it as a dismiss (reason
+`external`) rather than a playback failure.
 
 Wakey installs English and German sentences in
 `custom_sentences/en/wakey.yaml` and `custom_sentences/de/wakey.yaml` (also

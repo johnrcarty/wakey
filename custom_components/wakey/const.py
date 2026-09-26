@@ -120,6 +120,11 @@ MISSED_ALARM_GRACE = 15 * 60  # seconds
 # treating the alarm as failed and running the fallback.
 PLAYBACK_VERIFY_SECONDS = 10
 
+# How long the alarm must stay paused or off, after someone other than Wakey
+# silenced it (a bare "stop" to Assist, the speaker's own button), before that
+# counts as a dismiss. Long enough to ride out a player's own momentary pause.
+EXTERNAL_STOP_SETTLE_SECONDS = 2
+
 # Cap on any single blocking service call during the firing sequence. Without
 # it, one wedged integration could hang the alarm indefinitely.
 SERVICE_CALL_TIMEOUT = 15
