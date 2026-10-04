@@ -59,28 +59,43 @@ def test_parse_notification_action_rejects_malformed(action):
 # --- sending the notification ------------------------------------------------
 
 
-async def test_fire_sends_notification_when_targets_configured(hass, entry) -> None:
+@pytest.mark.parametrize("alarm_sound", [None, False, True])
+async def test_fire_sends_notification_when_targets_configured(hass, entry, alarm_sound) -> None:
     calls = async_mock_service(hass, "notify", "send_message")
     data = _data(hass)
-    alarm = data.store.async_create({**ALARM, "notify_targets": ["notify.phone"]})
+    options = {} if alarm_sound is None else {"notify_alarm_sound": alarm_sound}
+    targets = ["notify.phone", "notify.tablet"]
+    alarm = data.store.async_create({**ALARM, "notify_targets": targets, **options})
 
     await data.player.async_fire(alarm)
 
-    assert len(calls) == 1
-    assert calls[0].data["entity_id"] == "notify.phone"
-    actions = calls[0].data["data"]["actions"]
-    action_ids = {a["action"] for a in actions}
+    assert len(calls) == 2
+    assert {call.data["entity_id"] for call in calls} == set(targets)
     token = data.player.ringing[alarm.id].token
-    assert action_ids == {
-        f"{DOMAIN}_dismiss_{alarm.id}_{token}",
-        f"{DOMAIN}_snooze_{alarm.id}_{token}",
-    }
+    for call in calls:
+        payload = call.data["data"]
+        assert call.data["message"] == "Weekday is ringing"
+        assert call.data["title"] == "Wakey"
+        assert payload["priority"] == "high"
+        assert payload["ttl"] == 0
+        assert payload["push"] == {"interruption-level": "time-sensitive"}
+        assert payload["clickAction"] == f"/{DOMAIN}"
+        assert payload["tag"] == f"{DOMAIN}_{alarm.id}"
+        if alarm_sound:
+            assert payload["channel"] == "alarm_stream"
+        else:
+            assert "channel" not in payload
+        assert payload["actions"] == [
+            {"action": f"{DOMAIN}_dismiss_{alarm.id}_{token}", "title": "Dismiss"},
+            {"action": f"{DOMAIN}_snooze_{alarm.id}_{token}", "title": "Snooze"},
+        ]
 
 
-async def test_fire_sends_no_notification_without_targets(hass, entry) -> None:
+@pytest.mark.parametrize("alarm_sound", [False, True])
+async def test_fire_sends_no_notification_without_targets(hass, entry, alarm_sound) -> None:
     calls = async_mock_service(hass, "notify", "send_message")
     data = _data(hass)
-    alarm = data.store.async_create(ALARM)
+    alarm = data.store.async_create({**ALARM, "notify_alarm_sound": alarm_sound})
 
     await data.player.async_fire(alarm)
 

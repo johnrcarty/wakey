@@ -179,6 +179,39 @@ async def test_repeat_playback_round_trips_across_both_apis(hass, entry, hass_ws
     assert all(a.repeat_playback for a in data.store.async_all())
 
 
+async def test_notify_alarm_sound_round_trips_across_both_apis(hass, entry, hass_ws_client):
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "wakey/create", **ALARM, "notify_alarm_sound": True})
+    result = await client.receive_json()
+    assert result["success"]
+    alarm_id = result["result"]["alarm_id"]
+    await client.send_json_auto_id({"type": "wakey/list"})
+    assert (await client.receive_json())["result"]["alarms"][0]["notify_alarm_sound"] is True
+    await client.send_json_auto_id({
+        "type": "wakey/update", "alarm_id": alarm_id, "notify_alarm_sound": False,
+    })
+    assert (await client.receive_json())["success"]
+    data = hass.data[DOMAIN][entry.entry_id]
+    assert data.store.async_get(alarm_id).notify_alarm_sound is False
+    await hass.services.async_call(DOMAIN, "update", {
+        "alarm_id": alarm_id, "notify_alarm_sound": True,
+    }, blocking=True)
+    assert data.store.async_get(alarm_id).notify_alarm_sound is True
+    await hass.services.async_call(DOMAIN, "create", {
+        **ALARM, "name": "Created by action", "notify_alarm_sound": True,
+    }, blocking=True)
+    assert all(a.notify_alarm_sound for a in data.store.async_all())
+
+    await hass.services.async_call(DOMAIN, "update", {
+        "alarm_id": alarm_id, "name": "Renamed",
+    }, blocking=True)
+    assert data.store.async_get(alarm_id).notify_alarm_sound is True
+    await hass.services.async_call(DOMAIN, "update", {
+        "alarm_id": alarm_id, "notify_alarm_sound": False,
+    }, blocking=True)
+    assert data.store.async_get(alarm_id).notify_alarm_sound is False
+
+
 async def test_non_admin_with_no_policy_cannot_create(
     hass, entry, hass_ws_client, hass_read_only_access_token
 ) -> None:

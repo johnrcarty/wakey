@@ -245,7 +245,12 @@ class WakeyPlayer:
             "clickAction": f"/{DOMAIN}",
             "tag": f"{DOMAIN}_{alarm.id}",
             "push": {"interruption-level": "time-sensitive"},
+            # Deliver promptly on Android even after the device has been idle.
+            "priority": "high",
+            "ttl": 0,
         }
+        if alarm.notify_alarm_sound:
+            data["channel"] = "alarm_stream"
         for target in alarm.notify_targets:
             await self._call(
                 "notify",

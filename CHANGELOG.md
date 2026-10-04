@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.0
+
+### Added
+
+- **Use Android alarm sound** under Advanced routes ring notifications through
+  `alarm_stream` when enabled (#16). Available as `notify_alarm_sound` in create
+  and update actions too. Defaults to off for existing and new alarms. DND
+  behavior depends on device/channel settings; iOS sound is unchanged.
+
+### Fixed
+
+- Ring notifications now send Android `priority: high` and `ttl: 0` to request
+  prompt delivery while the device is idle (#16). Dismiss/Snooze actions and
+  the iOS time-sensitive setting are preserved.
+
 ## 0.6.0
 
 ### Added

@@ -118,6 +118,10 @@ create:
         entity:
           filter:
             domain: script
+    notify_alarm_sound:
+      required: false
+      selector:
+        boolean:
     notify_targets:
       required: false
       selector:
@@ -236,6 +240,10 @@ update:
         entity:
           filter:
             domain: script
+    notify_alarm_sound:
+      required: false
+      selector:
+        boolean:
     notify_targets:
       required: false
       selector:

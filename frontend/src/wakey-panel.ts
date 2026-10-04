@@ -215,6 +215,7 @@ export class WakeyPanel extends LitElement {
       pre_alarm_minutes: Number(d.pre_alarm_minutes ?? 0),
       pre_alarm_script: d.pre_alarm_script || null,
       notify_targets: d.notify_targets ?? [],
+      notify_alarm_sound: Boolean(d.notify_alarm_sound ?? false),
     };
     if (this._editing) {
       await this._call({ type: "wakey/update", alarm_id: this._editing, ...payload });
@@ -300,6 +301,7 @@ export class WakeyPanel extends LitElement {
             name: "notify_targets",
             selector: { entity: { multiple: true, filter: { domain: "notify" } } },
           },
+          { name: "notify_alarm_sound", selector: { boolean: {} } },
           { name: "resume_previous", selector: { boolean: {} } },
         ],
       },
@@ -323,6 +325,7 @@ export class WakeyPanel extends LitElement {
       pre_alarm_minutes: "Pre-alarm lead time",
       pre_alarm_script: "Pre-alarm script",
       notify_targets: "Notify on ring",
+      notify_alarm_sound: "Use Android alarm sound",
       resume_previous: "Resume previous playback",
       repeat_playback: "Repeat audio until dismissed",
       advanced: "Advanced",

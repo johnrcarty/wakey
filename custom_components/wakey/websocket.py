@@ -71,6 +71,7 @@ _FIELDS = {
     vol.Optional("pre_alarm_minutes"): vol.All(vol.Coerce(int), vol.Range(0, 240)),
     vol.Optional("pre_alarm_script"): vol.Any(str, None),
     vol.Optional("notify_targets"): vol.All(cv.ensure_list, [cv.entity_id]),
+    vol.Optional("notify_alarm_sound"): cv.boolean,
 }
 
 

@@ -73,6 +73,7 @@ async def test_reload_from_disk_round_trips(hass):
     await store.async_load()
     alarm = store.async_create({
         "name": "Weekday", "time": "06:30", "weekdays": [0, 2, 4], "repeat_playback": True,
+        "notify_alarm_sound": True,
     })
     await store.async_save_now()
 
@@ -83,6 +84,11 @@ async def test_reload_from_disk_round_trips(hass):
     assert reloaded.async_get(alarm.id).name == "Weekday"
     assert reloaded.async_get(alarm.id).weekdays == [0, 2, 4]
     assert reloaded.async_get(alarm.id).repeat_playback is True
+    assert reloaded.async_get(alarm.id).notify_alarm_sound is True
+
+
+def test_older_alarms_keep_default_notification_sound():
+    assert AlarmEntry.from_dict({"id": "old"}).notify_alarm_sound is False
 
 
 def test_older_alarms_do_not_enable_audio_repeat():

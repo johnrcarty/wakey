@@ -583,6 +583,7 @@ const ue = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], He = () => ({
   auto_dismiss_minutes: 30,
   enabled: !0,
   notify_targets: [],
+  notify_alarm_sound: !1,
   resume_previous: !1,
   repeat_playback: !1
 });
@@ -922,6 +923,7 @@ let u = class extends S {
       pre_alarm_minutes: "Pre-alarm lead time",
       pre_alarm_script: "Pre-alarm script",
       notify_targets: "Notify on ring",
+      notify_alarm_sound: "Use Android alarm sound",
       resume_previous: "Resume previous playback",
       repeat_playback: "Repeat audio until dismissed",
       advanced: "Advanced"
@@ -1041,7 +1043,8 @@ let u = class extends S {
       auto_dismiss_minutes: Number(t.auto_dismiss_minutes ?? 30),
       pre_alarm_minutes: Number(t.pre_alarm_minutes ?? 0),
       pre_alarm_script: t.pre_alarm_script || null,
-      notify_targets: t.notify_targets ?? []
+      notify_targets: t.notify_targets ?? [],
+      notify_alarm_sound: !!(t.notify_alarm_sound ?? !1)
     };
     this._editing ? await this._call({ type: "wakey/update", alarm_id: this._editing, ...e }) : await this._call({ type: "wakey/create", ...e, enabled: t.enabled ?? !0 }), this._closeDialog();
   }
@@ -1117,6 +1120,7 @@ let u = class extends S {
             name: "notify_targets",
             selector: { entity: { multiple: !0, filter: { domain: "notify" } } }
           },
+          { name: "notify_alarm_sound", selector: { boolean: {} } },
           { name: "resume_previous", selector: { boolean: {} } }
         ]
       }

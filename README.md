@@ -111,6 +111,25 @@ playing something when the alarm fired, Wakey compares `media_content_id` and
 only accepts `playing` once it has changed. Players that do not report a
 `media_content_id` fall back to the plain state check.
 
+### Ring notifications
+
+Choose **Notify on ring** targets under **Advanced** to receive a notification
+with Dismiss and Snooze buttons. Android notifications request immediate delivery
+with high priority and zero TTL, so they are not queued for later delivery when
+the device is offline. iOS notifications keep their time-sensitive setting.
+
+Enable **Use Android alarm sound** in the same section to play these notifications
+through Android's alarm audio stream, including in silent/vibrate mode. It is off
+by default for existing and new alarms. Alarm volume and Do Not Disturb behavior
+still depend on the device and notification channel settings; this is not a
+guaranteed DND override. The option does not change iOS sound or speaker playback.
+
+The equivalent create/update action field is `notify_alarm_sound: true`, used
+alongside `notify_targets`. It applies to all Android notification targets for
+that alarm. Test on your device with its screen off and usual overnight settings.
+See the [Companion notification documentation](https://companion.home-assistant.io/docs/notifications/critical-notifications/)
+for device configuration.
+
 ### Using actions
 
 Everything is also available as actions, which is handy for automations:

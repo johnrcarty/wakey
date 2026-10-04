@@ -25,6 +25,8 @@ export interface Alarm {
   pre_alarm_script: string | null;
   /** notify.* entities to push a Dismiss/Snooze-actionable alert to on ring. */
   notify_targets: string[];
+  /** Play Android notifications through the alarm stream (opt-in). */
+  notify_alarm_sound: boolean;
   /** The Home Assistant user this alarm belongs to. null means unowned. */
   owner_id: string | null;
   next_fire: string | null;
@@ -92,6 +94,7 @@ export const emptyDraft = (): Partial<Alarm> => ({
   auto_dismiss_minutes: 30,
   enabled: true,
   notify_targets: [],
+  notify_alarm_sound: false,
   resume_previous: false,
   repeat_playback: false,
 });

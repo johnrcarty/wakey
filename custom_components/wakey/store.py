@@ -82,6 +82,8 @@ class AlarmEntry:
     # Notify entities (notify.*) to push an actionable dismiss/snooze alert to
     # when this alarm rings. Empty means no notification is sent.
     notify_targets: list[str] = field(default_factory=list)
+    # Opt in to the Android alarm stream; existing alarms keep their channel.
+    notify_alarm_sound: bool = False
     last_fired: str | None = None
     # The Home Assistant user this alarm belongs to. None means unowned —
     # created before multi-user support, or by an automation with no user

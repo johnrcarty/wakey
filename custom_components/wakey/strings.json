@@ -45,6 +45,7 @@
         "auto_dismiss_minutes": { "name": "Auto dismiss", "description": "Stop by itself after this long if nobody dismisses it." },
         "pre_alarm_minutes": { "name": "Pre-alarm lead time", "description": "Run the pre-alarm script this many minutes before the alarm. 0 disables it." },
         "pre_alarm_script": { "name": "Pre-alarm script", "description": "Script to run before the alarm, for sunrise lights or heating." },
+        "notify_alarm_sound": { "name": "Use Android alarm sound", "description": "Play ring notifications through the Android alarm stream, including in silent/vibrate mode. Off by default. DND behavior depends on device and channel settings; does not change iOS sound." },
         "notify_targets": { "name": "Notify on ring", "description": "Send a push notification with Dismiss/Snooze actions to these notify targets when the alarm rings." },
         "enabled": { "name": "Enabled", "description": "Whether the alarm is armed." },
         "owner_id": { "name": "Owner", "description": "Home Assistant user this alarm belongs to. Only administrators can set it; leave it empty for a household alarm that only administrators see." }
@@ -72,6 +73,7 @@
         "auto_dismiss_minutes": { "name": "Auto dismiss", "description": "Stop by itself after this long." },
         "pre_alarm_minutes": { "name": "Pre-alarm lead time", "description": "Run the pre-alarm script this many minutes before the alarm. 0 disables it." },
         "pre_alarm_script": { "name": "Pre-alarm script", "description": "Script to run before the alarm." },
+        "notify_alarm_sound": { "name": "Use Android alarm sound", "description": "Play ring notifications through the Android alarm stream, including in silent/vibrate mode. Off by default. DND behavior depends on device and channel settings; does not change iOS sound." },
         "notify_targets": { "name": "Notify on ring", "description": "Send a push notification with Dismiss/Snooze actions to these notify targets when the alarm rings." },
         "owner_id": { "name": "Owner", "description": "Home Assistant user this alarm belongs to. Only administrators can set it; leave it empty for a household alarm that only administrators see." }
       }
